@@ -2,3 +2,5 @@ bun.lock
 node_modules
 opencode.json
 package.json
+# packages
+*.skill
