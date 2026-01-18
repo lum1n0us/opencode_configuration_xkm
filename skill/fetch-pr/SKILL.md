@@ -1,112 +1,109 @@
 ---
 name: fetch-pr
-description: Fetch GitHub Pull Request data and files to local directory for offline analysis. Use when ai-assistant needs to download PR files, metadata, reviews, and comments for code review preparation, local testing, or detailed analysis. Supports automatic repository detection or manual specification. Generates status reports and human-readable PR summaries.
-compatibility: opencode
-metadata:
-  version: "1.0"
+description: Fetch GitHub Pull Request metadata, comments, and diff files with local checkout. Use when Claude needs to analyze, review, or work with GitHub PR information including PR details, review comments, general comments, and code changes. Automatically checks out PR locally and generates structured reports using templates.
 ---
 
 # Fetch PR
 
 ## Overview
 
-This skill fetches complete GitHub Pull Request data to a local directory, including all changed files, metadata, reviews, and comments. Perfect for offline code review preparation and local testing scenarios.
+This skill fetches comprehensive GitHub Pull Request information, checks out the PR locally, and generates structured reports. It retrieves PR metadata, all types of comments, and code changes, then outputs them in organized formats for analysis and review using a customizable template system.
 
 ## Quick Start
 
-Use the main fetch script with PR number and output directory:
+Use the `fetch_pr.py` script to download PR information and checkout locally:
 
 ```bash
-python scripts/fetch_pr.py <pr_number> <inter_dir> [<repo_owner> <repo_name>]
+python scripts/fetch_pr.py <pr_number> <output_directory> [--repo_path <path>]
 ```
 
-### Parameters
+**Parameters:**
 - `pr_number`: GitHub PR number to fetch
-- `inter_dir`: Local directory to store all PR data and files
-- `repo_owner` (optional): Repository owner/organization
-- `repo_name` (optional): Repository name
+- `output_directory`: Directory to store all output files
+- `--repo_path`: Path to git repository (defaults to current directory)
 
-If owner/repo not provided, automatically detects from git remote
+**Requirements:**
+- GitHub CLI (`gh`) must be installed and authenticated
+- Must be run from within a git repository or specify `--repo_path`
 
-### Authentication
-Requires GitHub authentication via:
-- `GITHUB_TOKEN` or `GH_TOKEN` environment variable
-- GitHub CLI (`gh auth login`)
+## Key Features
 
-## Workflow
+### 1. Local PR Checkout
+The script automatically checks out the PR branch locally using `gh pr checkout`, allowing immediate code inspection and testing.
 
-1. **Repository Detection**: Automatically identifies repo from git remote or uses provided parameters
-2. **Authentication Check**: Verifies GitHub token availability
-3. **Data Fetching**: Downloads PR metadata, files, commits, reviews, and comments
-4. **File Storage**: Saves changed files and patch information to `files/` subdirectory
-5. **Report Generation**: Creates status and detailed info reports
+### 2. Template-Based Reports
+Uses a customizable markdown template (`assets/report_template.md`) for consistent report formatting. The template supports placeholders for all PR metadata and comment sections.
 
-## Output Structure
+### 3. Structured Status Reporting
+Status reports follow a specific format for easy parsing by other tools.
 
-The skill creates the following in your specified `inter_dir`:
+## Output Files
 
+The script generates three files in the specified output directory:
+
+### 1. Status Report (`fetch-pr_status.md`)
+**Success format:**
 ```
-inter_dir/
-├── fetch-pr_status.md          # Success/failure status report
-├── pr_info.md                  # Human-readable PR summary
-├── pr_data.json                # Raw API data (JSON)
-└── files/                      # Changed files and patches
-    ├── path/to/file.py         # Actual file contents
-    ├── path/to/file.py.patch   # Patch/diff information
-    └── ...
+SUCCESS
 ```
 
-### Status Report (`fetch-pr_status.md`)
-Simple success/fail indicator with error details if applicable.
+**Failure format:**
+```
+FAIL
+Error description here
+Additional error details...
+```
 
-### PR Info Report (`pr_info.md`)
-Comprehensive human-readable summary including:
-- PR metadata (author, dates, branches, merge status)
-- Description and statistics
-- File changes with addition/deletion counts
-- Commit history with authors and messages
-- Reviews with status and comments
-- All PR discussion comments
-- List of downloaded files
+### 2. Human-Readable Report (`report.md`)
+Comprehensive markdown report generated from template containing:
+- **Metadata**: Author, state, branch info, creation/update dates
+- **Description**: Full PR description
+- **Reviews**: Approval/rejection summaries with dates
+- **General Comments**: Issue-level comments
+- **Code Review Comments**: Line-specific review comments with file paths
+
+### 3. Code Changes (`changes.diff`)
+Complete diff in unified format showing all modifications made in the PR.
+
+## Template Customization
+
+The report template is located at `assets/report_template.md` and supports these placeholders:
+
+**Metadata placeholders:**
+- `{pr_number}`, `{title}`, `{author}`, `{state}`
+- `{url}`, `{head_branch}`, `{base_branch}`, `{mergeable}`
+- `{created_at}`, `{updated_at}`, `{description}`
+
+**Section placeholders:**
+- `{reviews_section}` - Formatted review summaries
+- `{general_comments_section}` - General PR comments
+- `{code_comments_section}` - Line-specific code comments
 
 ## Usage Examples
 
-### Basic Usage (Auto-detect repo)
+**Basic usage with checkout:**
 ```bash
-cd my-project
-python scripts/fetch_pr.py 123 ./pr-123-review
+python scripts/fetch_pr.py 123 ./pr_analysis
 ```
 
-### Specify Repository
+**Fetch PR from different repository:**
 ```bash
-python scripts/fetch_pr.py 456 ./analysis/pr-456 facebook react
+python scripts/fetch_pr.py 456 ./review_data --repo_path /path/to/repo
 ```
 
-### With Environment Token
+**Batch processing multiple PRs:**
 ```bash
-export GITHUB_TOKEN="ghp_xxx"
-python scripts/fetch_pr.py 789 /tmp/pr-data
+for pr in 100 101 102; do
+  python scripts/fetch_pr.py $pr ./prs/pr_$pr
+done
 ```
 
 ## Error Handling
 
-The skill handles common failure scenarios:
-- Missing GitHub authentication
-- Invalid PR numbers
-- Network connectivity issues
-- Repository detection failures
-- API rate limit exceeded
+The script validates:
+- Git repository existence and accessibility
+- GitHub CLI installation and authentication
+- PR existence, accessibility, and checkout capability
+- Network connectivity and API access
 
-All errors are captured in the status report with actionable error messages.
-
-## References
-
-- **GitHub API**: See `references/github_api.md` for API endpoint details and authentication methods
-- **Report Templates**: See `references/report_templates.md` for output format specifications
-
-## Notes
-
-- Files marked as "removed" in the PR are not downloaded, but their patch information is saved
-- Large files may take longer to download depending on network speed
-- The skill respects GitHub API rate limits (5,000 requests/hour for authenticated users)
-- All timestamps are preserved from GitHub API responses
+All errors are captured in the status report with descriptive messages for easy troubleshooting.

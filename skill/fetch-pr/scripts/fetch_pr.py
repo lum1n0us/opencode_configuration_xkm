@@ -1,338 +1,296 @@
 #!/usr/bin/env python3
 """
-PR Fetcher Script - Fetch GitHub PR data to local directory
-Usage: python fetch_pr.py <pr_number> <inter_dir> [<repo_owner> <repo_name>]
+Fetch PR script - Downloads PR metadata, comments, and diff from GitHub
 """
 
 import os
 import sys
 import json
-import requests
 import subprocess
+import argparse
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from datetime import datetime
 
 
-def get_github_token() -> Optional[str]:
-    """Get GitHub token from environment or gh CLI"""
-    # Try environment variable first
-    token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
-    if token:
-        return token
-
-    # Try gh CLI
+def run_command(cmd, cwd=None, capture_output=True):
+    """Run a shell command and return the result"""
     try:
         result = subprocess.run(
-            ["gh", "auth", "token"], capture_output=True, text=True, check=True
-        )
-        return result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return None
-
-
-def get_repo_info() -> tuple[str, str]:
-    """Get repository owner and name from git remote"""
-    try:
-        result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True,
+            cmd,
+            shell=True,
+            cwd=cwd,
+            capture_output=capture_output,
             text=True,
             check=True,
         )
-        url = result.stdout.strip()
-
-        # Parse GitHub URL
-        if "github.com" in url:
-            if url.startswith("git@"):
-                # SSH format: git@github.com:owner/repo.git
-                parts = url.split(":")[1].replace(".git", "").split("/")
-            else:
-                # HTTPS format: https://github.com/owner/repo.git
-                parts = url.split("/")[-2:]
-                parts[1] = parts[1].replace(".git", "")
-
-            return parts[0], parts[1]
-    except subprocess.CalledProcessError:
-        pass
-
-    raise ValueError("Could not determine repository from git remote")
+        return result.stdout.strip() if capture_output else None
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Command failed: {cmd}\nError: {e.stderr}")
 
 
-def fetch_pr_data(owner: str, repo: str, pr_number: int, token: str) -> Dict[str, Any]:
-    """Fetch PR data from GitHub API"""
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-    base_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
+def write_status_report(inter_dir, success, error_msg=None):
+    """Write status report in new format"""
+    status_file = Path(inter_dir) / "fetch-pr_status.md"
 
-    data = {}
-
-    # Fetch PR info
-    response = requests.get(base_url, headers=headers)
-    response.raise_for_status()
-    data["pr"] = response.json()
-
-    # Fetch PR files
-    response = requests.get(f"{base_url}/files", headers=headers)
-    response.raise_for_status()
-    data["files"] = response.json()
-
-    # Fetch PR commits
-    response = requests.get(f"{base_url}/commits", headers=headers)
-    response.raise_for_status()
-    data["commits"] = response.json()
-
-    # Fetch PR reviews
-    response = requests.get(f"{base_url}/reviews", headers=headers)
-    response.raise_for_status()
-    data["reviews"] = response.json()
-
-    # Fetch PR comments (issue comments)
-    response = requests.get(data["pr"]["_links"]["comments"]["href"], headers=headers)
-    response.raise_for_status()
-    data["comments"] = response.json()
-
-    # Fetch review comments
-    response = requests.get(f"{base_url}/comments", headers=headers)
-    response.raise_for_status()
-    data["review_comments"] = response.json()
-
-    return data
-
-
-def save_pr_files(
-    pr_data: Dict[str, Any], inter_dir: Path, owner: str, repo: str, token: str
-) -> List[str]:
-    """Save PR files to local directory"""
-    files_dir = inter_dir / "files"
-    files_dir.mkdir(parents=True, exist_ok=True)
-
-    headers = {"Authorization": f"token {token}"}
-    saved_files = []
-
-    for file_data in pr_data["files"]:
-        filename = file_data["filename"]
-        file_path = files_dir / filename
-
-        # Create parent directories
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Download file content if it exists (not deleted)
-        if file_data["status"] != "removed":
-            try:
-                # Get the file content from the raw URL
-                raw_url = file_data.get("raw_url")
-                if raw_url:
-                    response = requests.get(raw_url, headers=headers)
-                    response.raise_for_status()
-
-                    with open(file_path, "wb") as f:
-                        f.write(response.content)
-
-                    saved_files.append(str(file_path))
-            except requests.RequestException as e:
-                print(f"Warning: Could not download {filename}: {e}")
-
-        # Save patch/diff information
-        patch_path = files_dir / f"{filename}.patch"
-        patch_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(patch_path, "w") as f:
-            f.write(f"File: {filename}\n")
-            f.write(f"Status: {file_data['status']}\n")
-            f.write(f"Changes: +{file_data['additions']} -{file_data['deletions']}\n")
-            f.write("-" * 50 + "\n")
-            if file_data.get("patch"):
-                f.write(file_data["patch"])
-
-        saved_files.append(str(patch_path))
-
-    return saved_files
-
-
-def generate_status_report(
-    success: bool,
-    error_msg: str = "",
-    pr_number: int = 0,
-    files_count: int = 0,
-    inter_dir: Optional[Path] = None,
-) -> str:
-    """Generate status report content"""
     if success:
-        return f"""# fetch-pr Status Report
-
-**Status**: ✅ SUCCESS  
-**PR Number**: #{pr_number}  
-**Files Downloaded**: {files_count}  
-**Output Directory**: {inter_dir}  
-**Timestamp**: {Path().absolute()}  
-
-The PR has been successfully fetched and all files have been downloaded to the specified directory.
-"""
+        content = "SUCCESS"
     else:
-        return f"""# fetch-pr Status Report
+        content = f"FAIL\n{error_msg}"
 
-**Status**: ❌ FAILED  
-**PR Number**: #{pr_number}  
-**Error**: {error_msg}  
-**Timestamp**: {Path().absolute()}  
-
-The PR fetch operation failed. Please check the error message above and try again.
-"""
+    status_file.write_text(content)
+    return status_file
 
 
-def generate_pr_info_report(pr_data: Dict[str, Any], saved_files: List[str]) -> str:
-    """Generate detailed PR information report"""
-    pr = pr_data["pr"]
+def checkout_pr(repo_path, pr_number):
+    """Checkout PR to local branch using gh pr checkout"""
+    print(f"Checking out PR #{pr_number}...")
+    cmd = f"gh pr checkout {pr_number}"
+    run_command(cmd, cwd=repo_path, capture_output=False)
 
-    report = f"""# PR #{pr["number"]}: {pr["title"]}
 
-## Overview
-- **Author**: {pr["user"]["login"]}
-- **State**: {pr["state"]} 
-- **Created**: {pr["created_at"]}
-- **Updated**: {pr["updated_at"]}
-- **Base Branch**: {pr["base"]["ref"]}
-- **Head Branch**: {pr["head"]["ref"]}
-- **Mergeable**: {pr.get("mergeable", "Unknown")}
+def fetch_pr_metadata(repo_path, pr_number):
+    """Fetch PR metadata using gh CLI"""
+    cmd = f"gh pr view {pr_number} --json number,title,body,state,author,createdAt,updatedAt,url,headRefName,baseRefName,mergeable"
+    result = run_command(cmd, cwd=repo_path)
+    if result is None:
+        raise Exception("Failed to fetch PR metadata")
+    return json.loads(result)
+
+
+def fetch_pr_comments(repo_path, pr_number):
+    """Fetch PR comments using gh CLI"""
+    # Get review comments
+    try:
+        review_comments_cmd = f"gh api repos/:owner/:repo/pulls/{pr_number}/comments"
+        result = run_command(review_comments_cmd, cwd=repo_path)
+        review_comments = json.loads(result) if result else []
+    except:
+        review_comments = []
+
+    # Get issue comments (general PR comments)
+    try:
+        issue_comments_cmd = f"gh api repos/:owner/:repo/issues/{pr_number}/comments"
+        result = run_command(issue_comments_cmd, cwd=repo_path)
+        issue_comments = json.loads(result) if result else []
+    except:
+        issue_comments = []
+
+    # Get review summaries
+    try:
+        reviews_cmd = f"gh api repos/:owner/:repo/pulls/{pr_number}/reviews"
+        result = run_command(reviews_cmd, cwd=repo_path)
+        reviews = json.loads(result) if result else []
+    except:
+        reviews = []
+
+    return {
+        "review_comments": review_comments,
+        "issue_comments": issue_comments,
+        "reviews": reviews,
+    }
+
+
+def fetch_pr_diff(repo_path, pr_number):
+    """Fetch PR diff using gh CLI"""
+    cmd = f"gh pr diff {pr_number}"
+    result = run_command(cmd, cwd=repo_path)
+    return result if result is not None else ""
+
+
+def load_template():
+    """Load the report template"""
+    # Get the script directory to locate template
+    script_dir = Path(__file__).parent
+    skill_dir = script_dir.parent
+    template_path = skill_dir / "assets" / "report_template.md"
+
+    if template_path.exists():
+        return template_path.read_text()
+    else:
+        # Fallback template if file doesn't exist
+        return """# Pull Request #{pr_number}: {title}
+
+## Metadata
+- **Author**: {author}
+- **State**: {state}
+- **URL**: {url}
+- **Branch**: {head_branch} → {base_branch}
+- **Mergeable**: {mergeable}
+- **Created**: {created_at}
+- **Updated**: {updated_at}
 
 ## Description
-{pr["body"] or "No description provided."}
+{description}
 
-## Statistics
-- **Files Changed**: {len(pr_data["files"])}
-- **Commits**: {len(pr_data["commits"])}
-- **Additions**: {pr["additions"]}
-- **Deletions**: {pr["deletions"]}
-- **Reviews**: {len(pr_data["reviews"])}
-- **Comments**: {len(pr_data["comments"])} issue comments, {len(pr_data["review_comments"])} review comments
+{reviews_section}
 
-## Files Changed
-"""
+{general_comments_section}
 
-    for file_data in pr_data["files"]:
-        report += f"- `{file_data['filename']}` ({file_data['status']}) +{file_data['additions']} -{file_data['deletions']}\n"
+{code_comments_section}"""
 
-    # Add commits section
-    report += "\n## Commits\n"
-    for commit in pr_data["commits"]:
-        report += f"- [{commit['sha'][:8]}]({commit['html_url']}) {commit['commit']['message'].splitlines()[0]}\n"
-        report += f"  *by {commit['commit']['author']['name']} on {commit['commit']['author']['date']}*\n"
 
-    # Add reviews section if any
-    if pr_data["reviews"]:
-        report += "\n## Reviews\n"
-        for review in pr_data["reviews"]:
-            status_emoji = {
-                "APPROVED": "✅",
-                "CHANGES_REQUESTED": "❌",
-                "COMMENTED": "💬",
-            }.get(review["state"], "📝")
-            report += f"- {status_emoji} **{review['user']['login']}** ({review['state']}) - {review['submitted_at']}\n"
-            if review["body"]:
-                report += f"  > {review['body']}\n"
+def format_reviews_section(reviews):
+    """Format the reviews section"""
+    if not reviews:
+        return ""
 
-    # Add comments section if any
-    if pr_data["comments"]:
-        report += "\n## Issue Comments\n"
-        for comment in pr_data["comments"]:
-            report += f"- **{comment['user']['login']}** - {comment['created_at']}\n"
-            report += f"  > {comment['body'][:200]}{'...' if len(comment['body']) > 200 else ''}\n"
+    content = "## Reviews\n\n"
+    for review in reviews:
+        if review["state"] in ["APPROVED", "CHANGES_REQUESTED", "COMMENTED"]:
+            review_date = datetime.fromisoformat(
+                review["submitted_at"].replace("Z", "+00:00")
+            ).strftime("%Y-%m-%d %H:%M:%S UTC")
+            content += f"### {review['user']['login']} - {review['state']}\n"
+            content += f"*{review_date}*\n\n"
+            if review.get("body"):
+                content += f"{review['body']}\n\n"
+    return content
 
-    # Add review comments if any
-    if pr_data["review_comments"]:
-        report += "\n## Review Comments\n"
-        for comment in pr_data["review_comments"]:
-            report += f"- **{comment['user']['login']}** on `{comment['path']}` - {comment['created_at']}\n"
-            report += f"  > {comment['body'][:200]}{'...' if len(comment['body']) > 200 else ''}\n"
 
-    report += f"\n## Downloaded Files\n"
-    for file_path in saved_files:
-        report += f"- {file_path}\n"
+def format_general_comments_section(comments):
+    """Format the general comments section"""
+    if not comments:
+        return ""
 
-    return report
+    content = "## General Comments\n\n"
+    for comment in comments:
+        comment_date = datetime.fromisoformat(
+            comment["created_at"].replace("Z", "+00:00")
+        ).strftime("%Y-%m-%d %H:%M:%S UTC")
+        content += f"### {comment['user']['login']}\n"
+        content += f"*{comment_date}*\n\n"
+        content += f"{comment['body']}\n\n"
+    return content
+
+
+def format_code_comments_section(comments):
+    """Format the code review comments section"""
+    if not comments:
+        return ""
+
+    content = "## Code Review Comments\n\n"
+    for comment in comments:
+        comment_date = datetime.fromisoformat(
+            comment["created_at"].replace("Z", "+00:00")
+        ).strftime("%Y-%m-%d %H:%M:%S UTC")
+        content += f"### {comment['user']['login']} on {comment['path']}\n"
+        content += f"*{comment_date} - Line {comment.get('line', comment.get('original_line', 'N/A'))}*\n\n"
+        content += f"{comment['body']}\n\n"
+    return content
+
+
+def generate_markdown_report(metadata, comments, inter_dir):
+    """Generate a human-readable markdown report using template"""
+    report_file = Path(inter_dir) / "report.md"
+
+    # Format creation and update dates
+    created_at = datetime.fromisoformat(
+        metadata["createdAt"].replace("Z", "+00:00")
+    ).strftime("%Y-%m-%d %H:%M:%S UTC")
+    updated_at = datetime.fromisoformat(
+        metadata["updatedAt"].replace("Z", "+00:00")
+    ).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    # Load template
+    template = load_template()
+
+    # Format sections
+    reviews_section = format_reviews_section(comments["reviews"])
+    general_comments_section = format_general_comments_section(
+        comments["issue_comments"]
+    )
+    code_comments_section = format_code_comments_section(comments["review_comments"])
+
+    # Fill template
+    content = template.format(
+        pr_number=metadata["number"],
+        title=metadata["title"],
+        author=metadata["author"]["login"],
+        state=metadata["state"],
+        url=metadata["url"],
+        head_branch=metadata["headRefName"],
+        base_branch=metadata["baseRefName"],
+        mergeable=metadata.get("mergeable", "Unknown"),
+        created_at=created_at,
+        updated_at=updated_at,
+        description=metadata.get("body", "No description provided."),
+        reviews_section=reviews_section,
+        general_comments_section=general_comments_section,
+        code_comments_section=code_comments_section,
+    )
+
+    report_file.write_text(content)
+    return report_file
 
 
 def main():
-    if len(sys.argv) < 3:
-        print(
-            "Usage: python fetch_pr.py <pr_number> <inter_dir> [<repo_owner> <repo_name>]"
-        )
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Fetch GitHub PR information and generate reports"
+    )
+    parser.add_argument("pr_number", type=int, help="Pull request number")
+    parser.add_argument(
+        "inter_dir", help="Directory to store temporary files and reports"
+    )
+    parser.add_argument(
+        "--repo_path",
+        default=".",
+        help="Path to the git repository (default: current directory)",
+    )
 
-    pr_number = int(sys.argv[1])
-    inter_dir = Path(sys.argv[2])
+    args = parser.parse_args()
 
-    # Get repo info
-    try:
-        if len(sys.argv) >= 5:
-            owner, repo = sys.argv[3], sys.argv[4]
-        else:
-            owner, repo = get_repo_info()
-    except ValueError as e:
-        error_msg = f"Repository detection failed: {e}"
-        print(f"Error: {error_msg}")
-
-        # Generate failed status report
-        status_content = generate_status_report(False, error_msg, pr_number)
-        with open(inter_dir / "fetch-pr_status.md", "w") as f:
-            f.write(status_content)
-        sys.exit(1)
-
-    # Get GitHub token
-    token = get_github_token()
-    if not token:
-        error_msg = "GitHub token not found. Set GITHUB_TOKEN environment variable or use 'gh auth login'"
-        print(f"Error: {error_msg}")
-
-        # Generate failed status report
-        status_content = generate_status_report(False, error_msg, pr_number)
-        inter_dir.mkdir(parents=True, exist_ok=True)
-        with open(inter_dir / "fetch-pr_status.md", "w") as f:
-            f.write(status_content)
-        sys.exit(1)
-
-    # Create output directory
+    # Ensure inter_dir exists
+    inter_dir = Path(args.inter_dir)
     inter_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        print(f"Fetching PR #{pr_number} from {owner}/{repo}...")
+        # Validate that we're in a git repo and gh is available
+        repo_path = Path(args.repo_path).resolve()
+        if not (repo_path / ".git").exists():
+            raise Exception(f"Not a git repository: {repo_path}")
 
-        # Fetch PR data
-        pr_data = fetch_pr_data(owner, repo, pr_number, token)
+        # Check if gh CLI is available
+        run_command("gh --version")
 
-        # Save PR files
-        saved_files = save_pr_files(pr_data, inter_dir, owner, repo, token)
+        # Check if we're authenticated with gh
+        run_command("gh auth status")
 
-        # Save raw PR data as JSON
-        with open(inter_dir / "pr_data.json", "w") as f:
-            json.dump(pr_data, f, indent=2)
+        # Checkout PR to local
+        checkout_pr(repo_path, args.pr_number)
 
-        # Generate reports
-        status_content = generate_status_report(
-            True, "", pr_number, len(saved_files), inter_dir
-        )
-        with open(inter_dir / "fetch-pr_status.md", "w") as f:
-            f.write(status_content)
+        # Fetch PR metadata
+        print(f"Fetching PR #{args.pr_number} metadata...")
+        metadata = fetch_pr_metadata(repo_path, args.pr_number)
 
-        pr_info_content = generate_pr_info_report(pr_data, saved_files)
-        with open(inter_dir / "pr_info.md", "w") as f:
-            f.write(pr_info_content)
+        # Fetch PR comments
+        print("Fetching PR comments...")
+        comments = fetch_pr_comments(repo_path, args.pr_number)
 
-        print(f"✅ Successfully fetched PR #{pr_number}")
-        print(f"📁 Files saved to: {inter_dir}")
-        print(f"📊 Status report: {inter_dir / 'fetch-pr_status.md'}")
-        print(f"📋 PR info: {inter_dir / 'pr_info.md'}")
+        # Fetch PR diff
+        print("Fetching PR diff...")
+        diff = fetch_pr_diff(repo_path, args.pr_number)
+
+        # Write diff file
+        diff_file = inter_dir / "changes.diff"
+        diff_file.write_text(diff)
+
+        # Generate markdown report
+        print("Generating markdown report...")
+        report_file = generate_markdown_report(metadata, comments, inter_dir)
+
+        # Write success status
+        status_file = write_status_report(inter_dir, True)
+
+        print(f"✅ Success! Files generated:")
+        print(f"   Status: {status_file}")
+        print(f"   Report: {report_file}")
+        print(f"   Diff: {diff_file}")
 
     except Exception as e:
-        error_msg = f"Failed to fetch PR: {str(e)}"
-        print(f"Error: {error_msg}")
-
-        # Generate failed status report
-        status_content = generate_status_report(False, error_msg, pr_number)
-        with open(inter_dir / "fetch-pr_status.md", "w") as f:
-            f.write(status_content)
+        # Write failure status
+        status_file = write_status_report(inter_dir, False, str(e))
+        print(f"❌ Failed: {e}")
+        print(f"   Status: {status_file}")
         sys.exit(1)
 
 
