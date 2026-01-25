@@ -29,7 +29,7 @@ python scripts/fetch_pr.py <pr_number> <output_directory> [--repo_path <path>]
 ## Key Features
 
 ### 1. Local PR Checkout
-The script automatically checks out the PR branch locally using `gh pr checkout`, allowing immediate code inspection and testing.
+The script automatically checks out the PR branch locally using `gh pr checkout` and renames it to `pr/<pr-number>` for consistent branch naming, allowing immediate code inspection and testing.
 
 ### 2. Template-Based Reports
 Uses a customizable markdown template (`assets/report_template.md`) for consistent report formatting. The template supports placeholders for all PR metadata and comment sections.

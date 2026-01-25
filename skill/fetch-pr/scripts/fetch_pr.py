@@ -42,10 +42,33 @@ def write_status_report(inter_dir, success, error_msg=None):
 
 
 def checkout_pr(repo_path, pr_number):
-    """Checkout PR to local branch using gh pr checkout"""
+    """Checkout PR to local branch using gh pr checkout and rename to pr/<pr-number>"""
     print(f"Checking out PR #{pr_number}...")
+
+    # First checkout the PR (this creates a branch with the original name)
     cmd = f"gh pr checkout {pr_number}"
     run_command(cmd, cwd=repo_path, capture_output=False)
+
+    # Get the current branch name that was created
+    current_branch = run_command("git branch --show-current", cwd=repo_path)
+
+    # Define the target branch name
+    target_branch = f"pr/{pr_number}"
+
+    # If the current branch is not already the target name, rename it
+    if current_branch != target_branch:
+        print(f"Renaming branch from '{current_branch}' to '{target_branch}'...")
+
+        # Check if target branch already exists and delete it if so
+        try:
+            run_command(f"git branch -D {target_branch}", cwd=repo_path)
+            print(f"Deleted existing branch '{target_branch}'")
+        except:
+            # Branch doesn't exist, which is fine
+            pass
+
+        # Rename current branch to target name
+        run_command(f"git branch -m {target_branch}", cwd=repo_path)
 
 
 def fetch_pr_metadata(repo_path, pr_number):
