@@ -1,13 +1,13 @@
 ---
 name: build-wamr
-description: Build WebAssembly Micro Runtime (WAMR) components based on detected modifications. Intelligently builds iwasm (runtime) and/or wamrc (compiler) depending on changes detected in analysis.md or changes.diff files. Use after analyze-pr skill or when building WAMR projects with targeted component builds.
+description: Build WebAssembly Micro Runtime (WAMR) components based on detected modifications. Intelligently builds iwasm (runtime) and/or wamrc (compiler) depending on changes detected in analysis.md or changes.diff files. Automatically detects and enables compilation flags needed for modified lines. Uses clang/clang++ compilers with optimized toolchain configuration. Use after analyze-pr skill or when building WAMR projects with targeted component builds.
 ---
 
 # Build WAMR
 
 ## Overview
 
-This skill builds WebAssembly Micro Runtime (WAMR) components intelligently based on detected code modifications. It analyzes changes to determine whether to build the iwasm runtime, wamrc compiler, or both, then executes the appropriate CMake build commands.
+This skill builds WebAssembly Micro Runtime (WAMR) components intelligently based on detected code modifications. It analyzes changes to determine whether to build the iwasm runtime, wamrc compiler, or both, then executes the appropriate CMake build commands. **Enhanced with**: automatic compilation flag detection through comprehensive codebase analysis and **optimized clang/clang++ compiler integration** with toolchain support.
 
 ## Quick Start
 
@@ -23,8 +23,127 @@ python scripts/build_wamr.py <inter_dir> [--repo_path <path>]
 
 **Requirements:**
 - CMake installed and available in PATH
+- **Clang/clang++ compilers** (recommended, falls back to system default if unavailable)
 - Valid WAMR repository structure
 - Build dependencies for target platform
+
+## NEW: Optimized Clang Compiler Integration
+
+The skill now prioritizes **clang/clang++** compilers for optimal WAMR builds:
+
+### Automatic Toolchain Detection
+1. **Searches for existing toolchain**: `tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake`
+2. **Alternative locations**: `build-scripts/`, `cmake/`, `toolchain/` directories
+3. **Fallback creation**: Generates optimized clang toolchain if none found
+4. **Graceful degradation**: Uses system compilers if clang unavailable
+
+### Clang Toolchain Configuration
+```cmake
+# Automatically configured clang toolchain
+set(CMAKE_C_COMPILER clang)
+set(CMAKE_CXX_COMPILER clang++)
+
+# Optimized build flags
+set(CMAKE_C_FLAGS_DEBUG "-g -O0 -fno-omit-frame-pointer")
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
+
+# Enhanced warnings and analysis
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
+
+# Fuzzing support (if enabled)
+if(WAMR_BUILD_FUZZ_TEST)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer,address")
+endif()
+```
+
+### Build Integration Examples
+
+#### **With Repository Toolchain:**
+```bash
+# Uses tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake
+cmake -S product-mini/platforms/linux -B build/iwasm \
+    -DCMAKE_TOOLCHAIN_FILE=tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DWAMR_BUILD_SIMD=1
+```
+
+#### **With Fallback Toolchain:**
+```bash
+# Creates and uses fallback_clang_toolchain.cmake
+cmake -S product-mini/platforms/linux -B build/iwasm \
+    -DCMAKE_TOOLCHAIN_FILE=fallback_clang_toolchain.cmake \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DWAMR_BUILD_JIT=1
+```
+
+## NEW: Enhanced Compilation Flag Detection
+
+The skill now uses **comprehensive codebase analysis** to detect compilation flags, going far beyond just analyzing the diff:
+
+### Multi-Step Detection Process
+
+#### **Step 1: Direct Diff Analysis**
+- Analyzes modified lines in changed files
+- Looks for `#if WASM_ENABLE_XXX` blocks around modifications
+
+#### **Step 2: Related File Search**
+- Searches header files in same and parent directories
+- Scans CMake files (`CMakeLists.txt`, `*.cmake`, `*.in`)
+- Finds flag patterns in configuration files
+
+#### **Step 3: Function Dependency Analysis**
+- Extracts function names modified in the diff
+- Searches entire codebase for these functions
+- Detects if modified functions are used within conditional blocks
+
+#### **Step 4: Global Codebase Verification**
+- Scans all C/C++ source files for WASM_ENABLE patterns
+- Builds comprehensive flag usage map
+- Provides verification and fallback detection
+
+### Enhanced Detection Examples
+
+#### **Header File Dependencies**
+```c
+// In modified file: core/iwasm/runtime.c
+void my_function() {
+    // Modified code here
+}
+
+// In header: core/iwasm/common/wasm_runtime_common.h
+#if WASM_ENABLE_MULTI_MODULE
+    void my_function();  // ← Detects WASM_ENABLE_MULTI_MODULE
+#endif
+```
+
+#### **Function Usage Detection**
+```c
+// Modified function in diff
++ void new_simd_operation() { ... }
+
+// Used elsewhere in codebase
+#if WASM_ENABLE_SIMD
+    new_simd_operation();  // ← Detects dependency
+#endif
+```
+
+#### **CMake Configuration Detection**
+```cmake
+# In CMakeLists.txt or *.cmake files
+if(WAMR_BUILD_JIT)
+    set(WASM_ENABLE_JIT 1)  # ← Detects JIT requirement
+endif()
+```
+
+### Comprehensive Flag Discovery
+
+The enhanced system discovers flags through:
+
+1. **Direct conditional compilation** around modified lines
+2. **Header file dependencies** and includes
+3. **Function call analysis** across the entire codebase
+4. **Build system configuration** files
+5. **Global pattern matching** for verification
 
 ## Build Decision Logic
 
@@ -50,8 +169,12 @@ If no reference files exist or no modifications detected:
 When `core/iwasm` modifications are detected:
 
 ```bash
-# Configure (with compile commands export)
-cmake -S product-mini/platforms/linux -B ${inter_dir}/build/iwasm -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+# Configure (with clang toolchain + compile commands export + detected flags)
+cmake -S product-mini/platforms/linux -B ${inter_dir}/build/iwasm \
+    -DCMAKE_TOOLCHAIN_FILE=tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DWAMR_BUILD_SIMD=1 \
+    -DWAMR_BUILD_BULK_MEMORY=1
 
 # Build  
 cmake --build ${inter_dir}/build/iwasm
@@ -65,8 +188,11 @@ cmake --build ${inter_dir}/build/iwasm
 When `wamr-compiler` modifications are detected:
 
 ```bash
-# Configure (with compile commands export)
-cmake -S wamr-compiler -B ${inter_dir}/build/wamrc -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+# Configure (with clang toolchain + compile commands export + detected flags)
+cmake -S wamr-compiler -B ${inter_dir}/build/wamrc \
+    -DCMAKE_TOOLCHAIN_FILE=tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DWAMR_BUILD_AOT=1
 
 # Build
 cmake --build ${inter_dir}/build/wamrc  
@@ -75,6 +201,30 @@ cmake --build ${inter_dir}/build/wamrc
 **Output**: 
 - Compiler executable in `${inter_dir}/build/wamrc/`
 - `compile_commands.json` for IDE integration and static analysis
+
+## Clang Compiler Benefits
+
+Using clang/clang++ provides several advantages for WAMR builds:
+
+### **Better Optimization**
+- Advanced optimization passes for WebAssembly code generation
+- Superior cross-platform compatibility
+- Consistent behavior across different host platforms
+
+### **Enhanced Analysis**
+- Better static analysis capabilities
+- Improved warning messages and error diagnostics  
+- Support for sanitizers (AddressSanitizer, UndefinedBehaviorSanitizer)
+
+### **Fuzzing Support**
+- Built-in fuzzing capabilities with `-fsanitize=fuzzer`
+- Integration with WAMR's existing fuzz testing infrastructure
+- Better coverage analysis and bug detection
+
+### **Development Tools**
+- Excellent integration with clang-tidy static analyzer
+- Support for clang-format code formatting
+- Compatible with LLVM toolchain ecosystem
 
 ## Repository Validation
 
