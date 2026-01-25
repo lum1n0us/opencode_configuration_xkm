@@ -7,6 +7,9 @@
 - **Lines Added**: {lines_added}
 - **Lines Deleted**: {lines_deleted}
 
+## Change Type Classification
+**{change_type}**
+
 ## Change Classification
 
 {classification_summary}
@@ -18,6 +21,7 @@
 ## Impact Assessment
 
 ### Risk Level: {risk_level}
+**Risk Score**: {risk_score}
 
 {risk_assessment}
 

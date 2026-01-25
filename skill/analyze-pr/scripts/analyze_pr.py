@@ -15,7 +15,7 @@ from collections import defaultdict
 
 def write_status_report(inter_dir, success, error_msg=None):
     """Write status report in specified format"""
-    status_file = Path(inter_dir) / "analyze-pr_status.md"
+    status_file = Path(inter_dir) / "analyze_pr_status.md"
 
     if success:
         content = "SUCCESS"
@@ -149,6 +149,25 @@ def classify_file_path(file_path, classifications):
     return matched_categories
 
 
+def validate_classifications(file_classifications, repo_path):
+    """Validate that all files can be classified, stop if any can't be"""
+    unclassified_files = []
+
+    for file_path, classifications in file_classifications.items():
+        if classifications == ["other"]:
+            unclassified_files.append(file_path)
+
+    if unclassified_files:
+        error_msg = (
+            f"Cannot classify the following files using AGENTS.md information:\n"
+            + "\n".join(f"  - {f}" for f in unclassified_files[:10])  # Show first 10
+            + ("\n  - ..." if len(unclassified_files) > 10 else "")
+            + f"\n\nPlease update AGENTS.md in {repo_path} to include directory patterns "
+            + "that cover these files, or provide clarification on how to classify them."
+        )
+        raise Exception(error_msg)
+
+
 def parse_diff_file(diff_path):
     """Parse the diff file to extract changed files and statistics"""
     if not diff_path.exists():
@@ -198,38 +217,81 @@ def analyze_file_types(files):
     return dict(file_types)
 
 
-def assess_risk_level(classifications, diff_stats):
-    """Assess the risk level of the PR based on changes"""
+def is_code_file(file_path):
+    """Determine if a file is considered 'code' based on extension"""
+    code_extensions = {".c", ".h", ".cc"}
+    return Path(file_path).suffix.lower() in code_extensions
+
+
+def classify_pr_change_type(files):
+    """Classify PR as CODE CHANGE or NON-CODE CHANGE based on modified files"""
+    for file_path in files:
+        if is_code_file(file_path):
+            return "CODE CHANGE"
+    return "NON-CODE CHANGE"
+
+
+def assess_risk_level(classifications, diff_stats, files, file_classifications):
+    """Assess the risk level based on the specified rules"""
     risk_score = 0
 
-    # Risk factors
-    if "core_components" in classifications:
-        risk_score += 3
-    if "apis" in classifications:
-        risk_score += 2
-    if "build_system" in classifications:
-        risk_score += 2
-    if "ci_cd" in classifications:
-        risk_score += 1
+    # Check file types to determine base risk
+    has_code_files = any(is_code_file(f) for f in files)
+    has_core_components = "core_components" in classifications
 
-    # Large changes increase risk
+    # Document modifications only → low risk
+    only_docs = all(
+        f.endswith(".md")
+        or any("documentation" in cats for cats in file_classifications.get(f, []))
+        for f in files
+    )
+
+    if only_docs:
+        risk_score = 1  # Low risk
+
+    # Core components code (including headers) modified → high risk
+    elif has_core_components and has_code_files:
+        risk_score = 6  # High risk
+
+    # Test cases, samples, utilities only → low risk
+    elif all(
+        any(
+            cat in ["tests", "samples", "utilities"]
+            for cat in file_classifications.get(f, [])
+        )
+        for f in files
+    ):
+        risk_score = 1  # Low risk
+
+    # Build system, CI only → medium risk
+    elif all(
+        any(cat in ["build_system", "ci_cd"] for cat in file_classifications.get(f, []))
+        for f in files
+    ):
+        risk_score = 3  # Medium risk
+
+    # Large amount of code modified → high risk
     total_changes = diff_stats["lines_added"] + diff_stats["lines_deleted"]
-    if total_changes > 500:
-        risk_score += 2
-    elif total_changes > 100:
-        risk_score += 1
+    if total_changes > 500 and has_code_files:
+        risk_score = max(risk_score, 6)  # High risk
+    elif total_changes > 200 and has_code_files:
+        risk_score = max(risk_score, 4)  # Medium-high risk
 
-    # Multiple file types increase complexity
-    if len(diff_stats["files"]) > 10:
+    # Additional risk factors
+    if "core_components" in classifications:
+        risk_score += 2
+    if "apis" in classifications:
+        risk_score += 1
+    if "build_system" in classifications:
         risk_score += 1
 
     # Determine risk level
     if risk_score >= 5:
-        return "HIGH"
+        return "HIGH", risk_score
     elif risk_score >= 3:
-        return "MEDIUM"
+        return "MEDIUM", risk_score
     else:
-        return "LOW"
+        return "LOW", risk_score
 
 
 def load_template():
@@ -251,6 +313,9 @@ def load_template():
 - **Lines Added**: {lines_added}
 - **Lines Deleted**: {lines_deleted}
 
+## Change Type Classification
+**{change_type}**
+
 ## Change Classification
 
 {classification_summary}
@@ -262,6 +327,7 @@ def load_template():
 ## Impact Assessment
 
 ### Risk Level: {risk_level}
+**Risk Score**: {risk_score}
 
 {risk_assessment}
 
@@ -386,8 +452,13 @@ def generate_analysis_report(
     for classifications in file_classifications.values():
         all_classifications.update(classifications)
 
-    # Assess risk level
-    risk_level = assess_risk_level(all_classifications, diff_stats)
+    # Determine change type (CODE CHANGE or NON-CODE CHANGE)
+    change_type = classify_pr_change_type(diff_stats["files"])
+
+    # Assess risk level with new rules
+    risk_level, risk_score = assess_risk_level(
+        all_classifications, diff_stats, diff_stats["files"], file_classifications
+    )
 
     # Analyze file types
     file_types = analyze_file_types(diff_stats["files"])
@@ -402,10 +473,12 @@ def generate_analysis_report(
         "total_files": len(diff_stats["files"]),
         "lines_added": diff_stats["lines_added"],
         "lines_deleted": diff_stats["lines_deleted"],
+        "change_type": change_type,
         "classification_summary": format_classification_summary(file_classifications),
         "detailed_classification": format_detailed_classification(file_classifications),
         "risk_level": risk_level,
-        "risk_assessment": f"Based on the analysis, this PR has a **{risk_level}** risk level.",
+        "risk_score": risk_score,
+        "risk_assessment": f"Based on the analysis, this PR has a **{risk_level}** risk level (score: {risk_score}).",
         "affected_components": ", ".join(
             [c.replace("_", " ").title() for c in sorted(all_classifications)]
         ),
@@ -476,6 +549,10 @@ def main():
             file_classifications[file_path] = classify_file_path(
                 file_path, classifications
             )
+
+        # Validate that all files can be classified - stop if any can't be
+        print("Validating file classifications...")
+        validate_classifications(file_classifications, repo_path)
 
         # Generate analysis report
         print("Generating analysis report...")
