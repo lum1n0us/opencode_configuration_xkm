@@ -685,8 +685,111 @@ def find_clang_toolchain_file(repo_path):
     return None
 
 
+def validate_toolchain_file(toolchain_path):
+    """Validate that toolchain file exists, has proper clang configuration, and compilers are available"""
+    if not toolchain_path or not Path(toolchain_path).exists():
+        raise Exception(
+            "❌ MANDATORY REQUIREMENT FAILED: Clang toolchain file is required but not found.\n"
+            "   Expected locations:\n"
+            "   - tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake\n"
+            "   - build-scripts/clang_toolchain.cmake\n"
+            "   - cmake/clang_toolchain.cmake\n"
+            "   - toolchain/clang_toolchain.cmake\n"
+            "   Please ensure a valid clang toolchain file exists in one of these locations."
+        )
+
+    print(f"📋 Validating toolchain file: {toolchain_path}")
+
+    try:
+        with open(toolchain_path, "r", encoding="utf-8") as f:
+            content = f.read()
+    except Exception as e:
+        raise Exception(f"❌ Failed to read toolchain file {toolchain_path}: {e}")
+
+    # Check for required CMAKE_C_COMPILER setting
+    c_compiler_match = re.search(
+        r"set\s*\(\s*CMAKE_C_COMPILER\s+([^\s)]+)", content, re.IGNORECASE
+    )
+    cxx_compiler_match = re.search(
+        r"set\s*\(\s*CMAKE_CXX_COMPILER\s+([^\s)]+)", content, re.IGNORECASE
+    )
+
+    if not c_compiler_match:
+        raise Exception(
+            "❌ TOOLCHAIN VALIDATION FAILED: CMAKE_C_COMPILER not found in toolchain file.\n"
+            "   Toolchain file must contain: set(CMAKE_C_COMPILER clang)"
+        )
+
+    if not cxx_compiler_match:
+        raise Exception(
+            "❌ TOOLCHAIN VALIDATION FAILED: CMAKE_CXX_COMPILER not found in toolchain file.\n"
+            "   Toolchain file must contain: set(CMAKE_CXX_COMPILER clang++)"
+        )
+
+    # Extract compiler paths/names
+    c_compiler = c_compiler_match.group(1).strip().strip('"')
+    cxx_compiler = cxx_compiler_match.group(1).strip().strip('"')
+
+    print(f"   Found CMAKE_C_COMPILER: {c_compiler}")
+    print(f"   Found CMAKE_CXX_COMPILER: {cxx_compiler}")
+
+    # Verify that the compilers specified are clang-based
+    if "clang" not in c_compiler.lower():
+        raise Exception(
+            f"❌ TOOLCHAIN VALIDATION FAILED: CMAKE_C_COMPILER must be clang, found: {c_compiler}\n"
+            "   Please ensure toolchain file sets CMAKE_C_COMPILER to 'clang' or a clang-based compiler."
+        )
+
+    if "clang" not in cxx_compiler.lower():
+        raise Exception(
+            f"❌ TOOLCHAIN VALIDATION FAILED: CMAKE_CXX_COMPILER must be clang++, found: {cxx_compiler}\n"
+            "   Please ensure toolchain file sets CMAKE_CXX_COMPILER to 'clang++' or a clang++-based compiler."
+        )
+
+    # Verify the compilers are actually available
+    print("   🔍 Verifying toolchain compilers are available...")
+
+    try:
+        subprocess.run(
+            [c_compiler, "--version"], capture_output=True, text=True, check=True
+        )
+        print(f"   ✅ {c_compiler} is available")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        raise Exception(
+            f"❌ TOOLCHAIN VALIDATION FAILED: {c_compiler} specified in toolchain but not found in PATH.\n"
+            "   Please install {c_compiler} or update your PATH."
+        )
+
+    try:
+        subprocess.run(
+            [cxx_compiler, "--version"], capture_output=True, text=True, check=True
+        )
+        print(f"   ✅ {cxx_compiler} is available")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        raise Exception(
+            f"❌ TOOLCHAIN VALIDATION FAILED: {cxx_compiler} specified in toolchain but not found in PATH.\n"
+            "   Please install {cxx_compiler} or update your PATH."
+        )
+
+    print(f"✅ Toolchain file validation passed: {Path(toolchain_path).name}")
+    return toolchain_path
+
+
+def find_and_validate_clang_toolchain(repo_path):
+    """Find clang toolchain file and perform comprehensive validation"""
+    print("\n=== Locating and validating clang toolchain ===")
+
+    # Find toolchain file
+    toolchain_file = find_clang_toolchain_file(repo_path)
+
+    # Validate it thoroughly
+    validated_toolchain = validate_toolchain_file(toolchain_file)
+
+    return validated_toolchain
+
+
 def check_clang_availability():
-    """Check if clang/clang++ compilers are available"""
+    """Check if clang/clang++ compilers are available - MANDATORY REQUIREMENT"""
     try:
         # Check clang
         result = subprocess.run(
@@ -705,59 +808,13 @@ def check_clang_availability():
         return True
 
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("⚠️  Clang/clang++ not found in PATH")
-        print("   Will use system default compilers")
-        return False
-
-
-def create_fallback_clang_toolchain(inter_dir):
-    """Create a fallback clang toolchain file if none exists"""
-    toolchain_content = """# Clang toolchain file for WAMR build
-set(CMAKE_C_COMPILER clang)
-set(CMAKE_CXX_COMPILER clang++)
-
-# Set compiler flags for better optimization and debugging
-set(CMAKE_C_FLAGS_DEBUG "-g -O0 -fno-omit-frame-pointer")
-set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -fno-omit-frame-pointer")  
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
-
-# Enable additional warnings
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
-
-# For fuzzing and testing (if needed)
-if(WAMR_BUILD_FUZZ_TEST)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer,address")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=fuzzer,address")
-endif()
-"""
-
-    fallback_path = Path(inter_dir) / "fallback_clang_toolchain.cmake"
-    fallback_path.write_text(toolchain_content)
-
-    print(f"Created fallback clang toolchain: {fallback_path}")
-    return fallback_path
-    """Validate that the repository is a WAMR project"""
-    repo_path = Path(repo_path)
-
-    # Check for key WAMR directories/files
-    required_paths = [
-        repo_path / "core" / "iwasm",
-        repo_path / "wamr-compiler",
-        repo_path / "product-mini" / "platforms" / "linux",
-    ]
-
-    missing_paths = [path for path in required_paths if not path.exists()]
-
-    if missing_paths:
-        missing_str = ", ".join(str(p.relative_to(repo_path)) for p in missing_paths)
         raise Exception(
-            f"Repository does not appear to be a WAMR project. "
-            f"Missing required paths: {missing_str}"
+            "❌ MANDATORY REQUIREMENT FAILED: Clang/clang++ compilers are required but not found in PATH.\n"
+            "   Please install clang and ensure both 'clang' and 'clang++' are available in your system PATH.\n"
+            "   On Ubuntu/Debian: sudo apt install clang\n"
+            "   On CentOS/RHEL: sudo yum install clang\n"
+            "   On macOS: xcode-select --install"
         )
-
-    print("WAMR repository structure validated successfully")
 
 
 def build_iwasm(repo_path, inter_dir, compilation_flags=None, toolchain_file=None):
@@ -862,22 +919,14 @@ def main():
         # Validate WAMR repository structure
         validate_wamr_repository(repo_path)
 
-        # Check clang compiler availability and find toolchain
-        print("\n=== Setting up clang toolchain ===")
-        clang_available = check_clang_availability()
+        # STRICT: Enforce mandatory clang availability
+        print("\n=== Enforcing strict clang requirements ===")
+        check_clang_availability()  # This now throws exception if clang not available
 
-        # Find or create clang toolchain file
-        toolchain_file = None
-        if clang_available:
-            # Look for existing toolchain file
-            toolchain_file = find_clang_toolchain_file(repo_path)
-
-            # Create fallback if no toolchain file found
-            if not toolchain_file:
-                print("No clang toolchain file found, creating fallback...")
-                toolchain_file = create_fallback_clang_toolchain(inter_dir)
-        else:
-            print("Clang not available, will use system default compilers")
+        # STRICT: Enforce mandatory toolchain file with validation
+        toolchain_file = find_and_validate_clang_toolchain(
+            repo_path
+        )  # This throws exception if no valid toolchain
 
         # Read analysis and diff files if they exist
         print("\n=== Analyzing modifications ===")
@@ -912,15 +961,15 @@ def main():
         # Write success status
         status_file = write_status_report(inter_dir, True)
 
-        print(f"\n✅ WAMR build completed successfully!")
+        print(f"\n🔥 WAMR build completed successfully with STRICT clang requirements!")
         print(f"   Components built: {', '.join(builds_completed)}")
         if compilation_flags:
             print(
                 f"   Compilation flags applied: {', '.join(sorted(compilation_flags))}"
             )
-        if toolchain_file:
-            toolchain_name = Path(toolchain_file).name
-            print(f"   Clang toolchain used: {toolchain_name}")
+        # Toolchain is now always present due to strict validation
+        toolchain_name = Path(toolchain_file).name
+        print(f"   ✅ VALIDATED clang toolchain: {toolchain_name}")
         print(f"   Status: {status_file}")
         print(f"   Build outputs in: {inter_dir / 'build'}")
 
