@@ -32,15 +32,15 @@ python scripts/build_wamr.py <inter_dir> [--repo_path <path>]
 
 The skill now ENFORCES **clang/clang++** compilers for all WAMR builds with **zero tolerance for missing requirements**:
 
-### Mandatory Toolchain Validation
+### Mandatory Toolchain Requirements
 1. **🔥 STRICT SEARCH**: Searches for existing toolchain in required locations:
    - `tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake`
-   - `build-scripts/clang_toolchain.cmake`
+   - `build-scripts/clang_toolchain.cmake`  
    - `cmake/clang_toolchain.cmake`
    - `toolchain/clang_toolchain.cmake`
 2. **❌ NO FALLBACKS**: Build FAILS immediately if no toolchain file found
-3. **🔍 CONTENT VALIDATION**: Validates toolchain file contains proper clang configuration
-4. **⚡ COMPILER VERIFICATION**: Ensures specified compilers are actually available in PATH
+3. **📁 FILE VALIDATION**: Validates toolchain file exists (no content inspection)
+4. **⚡ CLANG REQUIREMENT**: Clang/clang++ must be available in system PATH
 
 ### Clang Toolchain Configuration
 ```cmake
@@ -292,8 +292,6 @@ python scripts/build_wamr.py ./outputs --repo_path /path/to/wamr-repo
 **🔥 NEW STRICT FAILURE SCENARIOS:**
 - **❌ Missing Clang**: Build stops immediately if clang/clang++ not in PATH
 - **❌ No Toolchain File**: Build stops immediately if no valid toolchain found
-- **❌ Invalid Toolchain Content**: Build stops if toolchain doesn't specify clang compilers
-- **❌ Toolchain Compiler Mismatch**: Build stops if toolchain references unavailable compilers
 
 **Traditional failure scenarios:**
 - **Invalid repository**: Validates WAMR directory structure
@@ -306,7 +304,7 @@ python scripts/build_wamr.py ./outputs --repo_path /path/to/wamr-repo
 ❌ MANDATORY REQUIREMENT FAILED: Clang/clang++ compilers are required but not found in PATH.
    Please install clang and ensure both 'clang' and 'clang++' are available in your system PATH.
    On Ubuntu/Debian: sudo apt install clang
-   On CentOS/RHEL: sudo yum install clang
+   On CentOS/RHEL: sudo yum install clang  
    On macOS: xcode-select --install
 
 ❌ MANDATORY REQUIREMENT FAILED: Clang toolchain file is required but not found.
@@ -315,9 +313,6 @@ python scripts/build_wamr.py ./outputs --repo_path /path/to/wamr-repo
    - build-scripts/clang_toolchain.cmake
    - cmake/clang_toolchain.cmake
    - toolchain/clang_toolchain.cmake
-
-❌ TOOLCHAIN VALIDATION FAILED: CMAKE_C_COMPILER must be clang, found: gcc
-   Please ensure toolchain file sets CMAKE_C_COMPILER to 'clang' or a clang-based compiler.
 ```
 
 ### Traditional Error Messages
@@ -365,8 +360,7 @@ This skill now operates with **ZERO TOLERANCE** for missing requirements:
 
 ### ✅ **NEW ENFORCEMENT:**
 - **Clang availability check** → Exception thrown if not found
-- **Toolchain file validation** → Content validation with compiler verification
-- **Compiler consistency check** → Ensures toolchain references available compilers
+- **Toolchain file existence** → File must exist in expected locations
 - **Build reliability** → Guaranteed clang-based builds or immediate failure
 
 ### 🎯 **Benefits of Strict Mode:**

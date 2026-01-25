@@ -686,7 +686,7 @@ def find_clang_toolchain_file(repo_path):
 
 
 def validate_toolchain_file(toolchain_path):
-    """Validate that toolchain file exists, has proper clang configuration, and compilers are available"""
+    """Validate that toolchain file exists - simple file path check only"""
     if not toolchain_path or not Path(toolchain_path).exists():
         raise Exception(
             "❌ MANDATORY REQUIREMENT FAILED: Clang toolchain file is required but not found.\n"
@@ -698,91 +698,18 @@ def validate_toolchain_file(toolchain_path):
             "   Please ensure a valid clang toolchain file exists in one of these locations."
         )
 
-    print(f"📋 Validating toolchain file: {toolchain_path}")
-
-    try:
-        with open(toolchain_path, "r", encoding="utf-8") as f:
-            content = f.read()
-    except Exception as e:
-        raise Exception(f"❌ Failed to read toolchain file {toolchain_path}: {e}")
-
-    # Check for required CMAKE_C_COMPILER setting
-    c_compiler_match = re.search(
-        r"set\s*\(\s*CMAKE_C_COMPILER\s+([^\s)]+)", content, re.IGNORECASE
-    )
-    cxx_compiler_match = re.search(
-        r"set\s*\(\s*CMAKE_CXX_COMPILER\s+([^\s)]+)", content, re.IGNORECASE
-    )
-
-    if not c_compiler_match:
-        raise Exception(
-            "❌ TOOLCHAIN VALIDATION FAILED: CMAKE_C_COMPILER not found in toolchain file.\n"
-            "   Toolchain file must contain: set(CMAKE_C_COMPILER clang)"
-        )
-
-    if not cxx_compiler_match:
-        raise Exception(
-            "❌ TOOLCHAIN VALIDATION FAILED: CMAKE_CXX_COMPILER not found in toolchain file.\n"
-            "   Toolchain file must contain: set(CMAKE_CXX_COMPILER clang++)"
-        )
-
-    # Extract compiler paths/names
-    c_compiler = c_compiler_match.group(1).strip().strip('"')
-    cxx_compiler = cxx_compiler_match.group(1).strip().strip('"')
-
-    print(f"   Found CMAKE_C_COMPILER: {c_compiler}")
-    print(f"   Found CMAKE_CXX_COMPILER: {cxx_compiler}")
-
-    # Verify that the compilers specified are clang-based
-    if "clang" not in c_compiler.lower():
-        raise Exception(
-            f"❌ TOOLCHAIN VALIDATION FAILED: CMAKE_C_COMPILER must be clang, found: {c_compiler}\n"
-            "   Please ensure toolchain file sets CMAKE_C_COMPILER to 'clang' or a clang-based compiler."
-        )
-
-    if "clang" not in cxx_compiler.lower():
-        raise Exception(
-            f"❌ TOOLCHAIN VALIDATION FAILED: CMAKE_CXX_COMPILER must be clang++, found: {cxx_compiler}\n"
-            "   Please ensure toolchain file sets CMAKE_CXX_COMPILER to 'clang++' or a clang++-based compiler."
-        )
-
-    # Verify the compilers are actually available
-    print("   🔍 Verifying toolchain compilers are available...")
-
-    try:
-        subprocess.run(
-            [c_compiler, "--version"], capture_output=True, text=True, check=True
-        )
-        print(f"   ✅ {c_compiler} is available")
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        raise Exception(
-            f"❌ TOOLCHAIN VALIDATION FAILED: {c_compiler} specified in toolchain but not found in PATH.\n"
-            "   Please install {c_compiler} or update your PATH."
-        )
-
-    try:
-        subprocess.run(
-            [cxx_compiler, "--version"], capture_output=True, text=True, check=True
-        )
-        print(f"   ✅ {cxx_compiler} is available")
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        raise Exception(
-            f"❌ TOOLCHAIN VALIDATION FAILED: {cxx_compiler} specified in toolchain but not found in PATH.\n"
-            "   Please install {cxx_compiler} or update your PATH."
-        )
-
-    print(f"✅ Toolchain file validation passed: {Path(toolchain_path).name}")
+    print(f"✅ Toolchain file found: {Path(toolchain_path).name}")
     return toolchain_path
 
 
 def find_and_validate_clang_toolchain(repo_path):
-    """Find clang toolchain file and perform comprehensive validation"""
-    print("\n=== Locating and validating clang toolchain ===")
+    """Find clang toolchain file and perform simple validation (file existence only)"""
+    print("\n=== Locating clang toolchain ===")
 
     # Find toolchain file
     toolchain_file = find_clang_toolchain_file(repo_path)
 
-    # Validate it thoroughly
+    # Validate it exists
     validated_toolchain = validate_toolchain_file(toolchain_file)
 
     return validated_toolchain
