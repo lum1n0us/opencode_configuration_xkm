@@ -1,4 +1,11 @@
 #
+# debugging files and temporary files
+*.backup
+*.log
+*.temp
+tmp.*
+
+#
 # dependency directories
 bun.lock
 node_modules
@@ -10,7 +17,7 @@ opencode.json
 
 #
 # skill generated files
-# **/__pycache__/
+**/__pycache__/
 
 #
 # skill packages
