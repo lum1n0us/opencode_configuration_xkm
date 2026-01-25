@@ -13,6 +13,26 @@ from datetime import datetime
 from collections import defaultdict
 
 
+def is_comment_line(line):
+    """Detect if a diff line is a comment in C/C++ code"""
+    # Remove diff prefix (+/-) and whitespace for analysis
+    content = line[1:].strip() if line.startswith(("+", "-")) else line.strip()
+
+    # Skip empty lines
+    if not content:
+        return False
+
+    # Check for C/C++ style comments
+    return (
+        content.startswith("//")  # Single-line comment
+        or content.startswith("/*")  # Multi-line comment start
+        or content.startswith("*")  # Multi-line comment continuation
+        or content.endswith("*/")  # Multi-line comment end
+        or content == "/*"
+        or content == "*/"  # Standalone comment markers
+    )
+
+
 def write_status_report(inter_dir, success, error_msg=None):
     """Write status report in specified format"""
     status_file = Path(inter_dir) / "analyze_pr_status.md"
@@ -190,11 +210,17 @@ def parse_diff_file(diff_path):
                 current_file = parts[3][2:]  # Remove 'b/' prefix
                 changed_files.append(current_file)
 
-        # Count added/deleted lines
+        # Count added/deleted lines (excluding comments and whitespace-only)
         elif line.startswith("+") and not line.startswith("+++"):
-            lines_added += 1
+            if (
+                not is_comment_line(line) and line[1:].strip()
+            ):  # Skip comments and empty lines
+                lines_added += 1
         elif line.startswith("-") and not line.startswith("---"):
-            lines_deleted += 1
+            if (
+                not is_comment_line(line) and line[1:].strip()
+            ):  # Skip comments and empty lines
+                lines_deleted += 1
 
     return {
         "files": list(set(changed_files)),  # Remove duplicates

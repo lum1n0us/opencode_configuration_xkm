@@ -12,6 +12,30 @@ from pathlib import Path
 from datetime import datetime
 
 
+def is_comment_or_empty_line(line_content, line_num, modified_lines):
+    """Check if a line is a comment or empty, and if it's in the modified lines"""
+    if line_num not in modified_lines:
+        return False
+
+    content = line_content.strip()
+
+    # Skip empty lines
+    if not content:
+        return True
+
+    # Check for C/C++ style comments
+    is_comment = (
+        content.startswith("//")  # Single-line comment
+        or content.startswith("/*")  # Multi-line comment start
+        or content.startswith("*")  # Multi-line comment continuation (common style)
+        or content.endswith("*/")  # Multi-line comment end
+        or content == "/*"
+        or content == "*/"  # Standalone comment markers
+    )
+
+    return is_comment
+
+
 def run_command(cmd, cwd=None):
     """Run a shell command and return the result"""
     try:
@@ -149,8 +173,14 @@ def analyze_file_for_compilation_flags(file_path, modified_lines, repo_path):
     detected_flags = set()
 
     # For each modified line, check if it's within conditional compilation blocks
+    # BUT ignore lines that are comments
     for line_num in modified_lines:
         if line_num <= 0 or line_num > len(file_lines):
+            continue
+
+        # Skip comment lines - they don't affect compilation flags
+        if is_comment_or_empty_line(file_lines[line_num - 1], line_num, modified_lines):
+            print(f"    Skipping comment/empty line {line_num}")
             continue
 
         # Search backwards and forwards from the modified line to find enclosing #if blocks
@@ -211,381 +241,68 @@ def find_enclosing_compilation_flags(file_lines, target_line_idx):
 
 
 def map_wasm_enable_to_wamr_build(wasm_enable_flags):
-    """Map WASM_ENABLE_* flags to corresponding WAMR_BUILD_* cmake flags"""
-    flag_mapping = {
-        "WASM_ENABLE_INTERP": "WAMR_BUILD_INTERP",
-        "WASM_ENABLE_AOT": "WAMR_BUILD_AOT",
-        "WASM_ENABLE_JIT": "WAMR_BUILD_JIT",
-        "WASM_ENABLE_LIBC_BUILTIN": "WAMR_BUILD_LIBC_BUILTIN",
-        "WASM_ENABLE_LIBC_WASI": "WAMR_BUILD_LIBC_WASI",
-        "WASM_ENABLE_LIBC_EMCC": "WAMR_BUILD_LIBC_EMCC",
-        "WASM_ENABLE_MULTI_MODULE": "WAMR_BUILD_MULTI_MODULE",
-        "WASM_ENABLE_THREAD_MGR": "WAMR_BUILD_THREAD_MGR",
-        "WASM_ENABLE_LIB_PTHREAD": "WAMR_BUILD_LIB_PTHREAD",
-        "WASM_ENABLE_SHARED_MEMORY": "WAMR_BUILD_SHARED_MEMORY",
-        "WASM_ENABLE_BULK_MEMORY": "WAMR_BUILD_BULK_MEMORY",
-        "WASM_ENABLE_REF_TYPES": "WAMR_BUILD_REF_TYPES",
-        "WASM_ENABLE_SIMD": "WAMR_BUILD_SIMD",
-        "WASM_ENABLE_STRINGREF": "WAMR_BUILD_STRINGREF",
-        "WASM_ENABLE_GC": "WAMR_BUILD_GC",
-        "WASM_ENABLE_CUSTOM_SECTION": "WAMR_BUILD_CUSTOM_SECTION",
-        "WASM_ENABLE_TAIL_CALL": "WAMR_BUILD_TAIL_CALL",
-        "WASM_ENABLE_TAGS": "WAMR_BUILD_TAGS",
-        "WASM_ENABLE_MINI_LOADER": "WAMR_BUILD_MINI_LOADER",
-        "WASM_ENABLE_MEMORY_PROFILING": "WAMR_BUILD_MEMORY_PROFILING",
-        "WASM_ENABLE_PERF_PROFILING": "WAMR_BUILD_PERF_PROFILING",
-        "WASM_ENABLE_DUMP_CALL_STACK": "WAMR_BUILD_DUMP_CALL_STACK",
-        "WASM_ENABLE_FAST_INTERP": "WAMR_BUILD_FAST_INTERP",
-        "WASM_ENABLE_SPEC_TEST": "WAMR_BUILD_SPEC_TEST",
+    """Map WASM_ENABLE_* flags to corresponding WAMR_BUILD_* cmake flags using generic rule first"""
+
+    # Special cases that don't follow the generic WASM_ENABLE_XYZ -> WAMR_BUILD_XYZ rule
+    special_mappings = {
+        # Add only exceptions to the generic rule here if needed
+        # "WASM_ENABLE_SPECIAL_CASE": "WAMR_BUILD_DIFFERENT_NAME",
     }
 
     wamr_build_flags = set()
     for wasm_flag in wasm_enable_flags:
-        if wasm_flag in flag_mapping:
-            wamr_build_flags.add(flag_mapping[wasm_flag])
+        # First, check if there's a special mapping
+        if wasm_flag in special_mappings:
+            wamr_build_flags.add(special_mappings[wasm_flag])
+            print(f"Special mapping: {wasm_flag} -> {special_mappings[wasm_flag]}")
         else:
-            # For unknown flags, try a generic mapping
+            # Use generic rule: WASM_ENABLE_XYZ -> WAMR_BUILD_XYZ
             generic_flag = wasm_flag.replace("WASM_ENABLE_", "WAMR_BUILD_")
             wamr_build_flags.add(generic_flag)
-            print(f"Warning: Using generic mapping {wasm_flag} -> {generic_flag}")
+            print(f"Generic mapping: {wasm_flag} -> {generic_flag}")
 
     return wamr_build_flags
 
 
-def find_all_wasm_enable_flags_in_codebase(repo_path):
-    """Scan entire codebase to find all WASM_ENABLE_* flags and their usage patterns"""
-    repo_path = Path(repo_path)
-
-    print("Scanning entire codebase for WASM_ENABLE flags...")
-
-    # Find all C/C++ source and header files
-    source_patterns = ["**/*.c", "**/*.h", "**/*.cc", "**/*.cpp", "**/*.cxx"]
-    all_source_files = []
-
-    for pattern in source_patterns:
-        all_source_files.extend(repo_path.glob(pattern))
-
-    # Dictionary to store flag -> list of (file, line_num, context) mappings
-    flag_usage_map = {}
-    flag_definitions = {}
-
-    print(f"Found {len(all_source_files)} source files to analyze")
-
-    for file_path in all_source_files:
-        try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                lines = f.readlines()
-
-            for line_num, line in enumerate(lines, 1):
-                line_stripped = line.strip()
-
-                # Look for WASM_ENABLE flags in various contexts
-                wasm_flags = re.findall(r"WASM_ENABLE_\w+", line)
-
-                for flag in wasm_flags:
-                    relative_path = file_path.relative_to(repo_path)
-
-                    if flag not in flag_usage_map:
-                        flag_usage_map[flag] = []
-
-                    # Determine the type of usage
-                    usage_type = determine_flag_usage_type(line_stripped, flag)
-
-                    flag_usage_map[flag].append(
-                        {
-                            "file": str(relative_path),
-                            "line": line_num,
-                            "context": line_stripped,
-                            "usage_type": usage_type,
-                        }
-                    )
-
-                    # Track definitions separately
-                    if usage_type == "definition":
-                        flag_definitions[flag] = {
-                            "file": str(relative_path),
-                            "line": line_num,
-                            "context": line_stripped,
-                        }
-
-        except Exception as e:
-            # Skip files that can't be read
-            continue
-
-    return flag_usage_map, flag_definitions
-
-
-def determine_flag_usage_type(line, flag):
-    """Determine how a WASM_ENABLE flag is being used in a line"""
-    line_lower = line.lower()
-
-    if re.match(r"#\s*define\s+" + flag, line):
-        return "definition"
-    elif re.match(r"#\s*if(?:n?def)?\s+", line):
-        return "conditional"
-    elif re.match(r"#\s*elif\s+", line):
-        return "conditional"
-    elif "cmake" in line_lower or "option(" in line_lower:
-        return "cmake_option"
-    elif line.startswith("//") or line.startswith("/*"):
-        return "comment"
-    else:
-        return "usage"
-
-
-def analyze_modified_functions_dependencies(diff_content, repo_path):
-    """Analyze modified functions and find what flags might affect them"""
-    if not diff_content:
-        return set()
-
-    print("\n=== Analyzing function dependencies for WASM_ENABLE flags ===")
-
-    # Extract function names from diff
-    modified_functions = extract_function_names_from_diff(diff_content)
-
-    if not modified_functions:
-        print("No function modifications detected in diff")
-        return set()
-
-    print(f"Found modified functions: {', '.join(modified_functions)}")
-
-    # Search codebase for usage of these functions within conditional blocks
-    dependent_flags = set()
-    flag_usage_map, _ = find_all_wasm_enable_flags_in_codebase(repo_path)
-
-    # For each WASM_ENABLE flag, check if it conditionally compiles code that uses our functions
-    for flag, usages in flag_usage_map.items():
-        for usage in usages:
-            if usage["usage_type"] == "conditional":
-                # Check if any modified functions are used within this conditional block
-                if check_functions_in_conditional_block(
-                    usage["file"], usage["line"], modified_functions, repo_path
-                ):
-                    dependent_flags.add(flag)
-                    print(
-                        f"  Found dependency: {flag} in {usage['file']}:{usage['line']}"
-                    )
-
-    return dependent_flags
-
-
-def extract_function_names_from_diff(diff_content):
-    """Extract function names that were modified in the diff"""
-    function_names = set()
-    lines = diff_content.split("\n")
-
-    for line in lines:
-        # Look for function definitions in added/modified lines
-        if line.startswith("+") and not line.startswith("+++"):
-            # Match C function definitions: type name(...) or name(...)
-            func_matches = re.findall(r"\b([a-zA-Z_]\w*)\s*\(", line)
-            for match in func_matches:
-                # Filter out common keywords and macros
-                if match not in [
-                    "if",
-                    "for",
-                    "while",
-                    "switch",
-                    "return",
-                    "sizeof",
-                    "typeof",
-                    "printf",
-                    "malloc",
-                    "free",
-                ]:
-                    function_names.add(match)
-
-    return function_names
-
-
-def check_functions_in_conditional_block(
-    file_path, conditional_line, function_names, repo_path
-):
-    """Check if any of the function names appear within a conditional block"""
-    full_path = Path(repo_path) / file_path
-
-    if not full_path.exists():
-        return False
-
-    try:
-        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
-            lines = f.readlines()
-    except:
-        return False
-
-    # Find the matching #endif for the conditional at conditional_line
-    if conditional_line <= 0 or conditional_line > len(lines):
-        return False
-
-    # Start from the conditional line and find the matching endif
-    if_stack = 0
-    start_line = conditional_line - 1  # Convert to 0-based
-
-    for i in range(start_line, len(lines)):
-        line = lines[i].strip()
-
-        if re.match(r"#\s*if", line):
-            if_stack += 1
-        elif line.startswith("#endif"):
-            if_stack -= 1
-            if if_stack == 0:
-                # This is our matching endif, check the block
-                block_content = "\n".join(lines[start_line : i + 1])
-
-                # Check if any of our modified functions appear in this block
-                for func_name in function_names:
-                    if re.search(r"\b" + re.escape(func_name) + r"\b", block_content):
-                        return True
-                break
-
-    return False
-
-
-def search_for_flag_patterns_around_files(modified_files, repo_path):
-    """Search for WASM_ENABLE patterns in files related to the modified files"""
-    related_flags = set()
-
-    print("\n=== Searching for WASM_ENABLE patterns in related files ===")
-
-    for file_path in modified_files.keys():
-        # Get directory of the modified file
-        file_dir = Path(file_path).parent
-
-        # Search in the same directory and parent directories for relevant patterns
-        search_dirs = [file_dir]
-
-        # Add parent directories (up to 2 levels)
-        current_dir = file_dir
-        for _ in range(2):
-            current_dir = current_dir.parent
-            if str(current_dir) != ".":
-                search_dirs.append(current_dir)
-
-        # Search for header files and CMake files in these directories
-        for search_dir in search_dirs:
-            full_search_path = Path(repo_path) / search_dir
-            if not full_search_path.exists():
-                continue
-
-            # Search for relevant files
-            patterns = ["*.h", "*.hpp", "CMakeLists.txt", "*.cmake", "*.in"]
-
-            for pattern in patterns:
-                for found_file in full_search_path.glob(pattern):
-                    flags = extract_flags_from_file(found_file)
-                    if flags:
-                        relative_path = found_file.relative_to(Path(repo_path))
-                        print(f"  Found flags in {relative_path}: {', '.join(flags)}")
-                        related_flags.update(flags)
-
-    return related_flags
-
-
-def extract_flags_from_file(file_path):
-    """Extract WASM_ENABLE flags from a single file"""
-    flags = set()
-
-    try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
-
-        # Find all WASM_ENABLE patterns
-        wasm_flags = re.findall(r"WASM_ENABLE_\w+", content)
-        flags.update(wasm_flags)
-
-    except:
-        pass
-
-    return flags
-
-
 def detect_compilation_flags(diff_content, repo_path):
-    """Detect compilation flags needed based on comprehensive codebase analysis"""
+    """Detect compilation flags by analyzing modified lines for WASM_ENABLE macros"""
     if not diff_content:
         return set()
 
-    print("\n=== Detecting compilation flags with enhanced codebase analysis ===")
+    print("\n=== Detecting WASM_ENABLE flags from modified lines ===")
+
+    # Parse diff to find modified files and line numbers
+    modified_files = parse_diff_for_modified_lines(diff_content)
+
+    if not modified_files:
+        print("No modified C/C++ files found in diff")
+        return set()
 
     all_detected_flags = set()
 
-    # Method 1: Original diff-based analysis (for direct conditional compilation)
-    print("Step 1: Analyzing modified lines in diff...")
-    modified_files = parse_diff_for_modified_lines(diff_content)
+    # Analyze each modified file for WASM_ENABLE flags around modified lines
+    for file_path, line_numbers in modified_files.items():
+        if not line_numbers:
+            continue
 
-    if modified_files:
-        for file_path, line_numbers in modified_files.items():
-            if not line_numbers:
-                continue
+        print(f"  Analyzing {file_path} (modified lines: {line_numbers})")
 
-            print(f"  Analyzing {file_path} (modified lines: {line_numbers})")
-
-            # Analyze each file for compilation flags
-            file_flags = analyze_file_for_compilation_flags(
-                file_path, line_numbers, repo_path
-            )
-
-            if file_flags:
-                print(f"    Direct flags: {', '.join(sorted(file_flags))}")
-                all_detected_flags.update(file_flags)
-
-    # Method 2: Search for patterns in related files (headers, CMake files)
-    print("Step 2: Searching for WASM_ENABLE patterns in related files...")
-    if modified_files:
-        related_flags = search_for_flag_patterns_around_files(modified_files, repo_path)
-        if related_flags:
-            print(f"  Related file flags: {', '.join(sorted(related_flags))}")
-            all_detected_flags.update(related_flags)
-
-    # Method 3: Analyze function dependencies (modified functions used in conditional code)
-    print("Step 3: Analyzing function dependencies...")
-    function_dependent_flags = analyze_modified_functions_dependencies(
-        diff_content, repo_path
-    )
-    if function_dependent_flags:
-        print(
-            f"  Function dependency flags: {', '.join(sorted(function_dependent_flags))}"
+        # Check for WASM_ENABLE flags that control the modified lines
+        file_flags = analyze_file_for_compilation_flags(
+            file_path, line_numbers, repo_path
         )
-        all_detected_flags.update(function_dependent_flags)
 
-    # Method 4: Global codebase scan for commonly used flags (fallback/verification)
-    print("Step 4: Performing global codebase verification...")
-    global_flags, global_definitions = find_all_wasm_enable_flags_in_codebase(repo_path)
+        if file_flags:
+            print(f"    Found flags: {', '.join(sorted(file_flags))}")
+            all_detected_flags.update(file_flags)
 
-    # Filter global flags to only include those that are likely relevant
-    relevant_global_flags = set()
-    for flag in global_flags:
-        # Include flags that have conditional usage (not just definitions/comments)
-        conditional_usages = [
-            usage
-            for usage in global_flags[flag]
-            if usage["usage_type"] in ["conditional", "usage"]
-        ]
-        if conditional_usages:
-            relevant_global_flags.add(flag)
-
-    # Report all available flags for reference
-    if relevant_global_flags:
-        print(
-            f"  Available WASM_ENABLE flags in codebase: {len(relevant_global_flags)}"
-        )
-        print(f"    Most common: {', '.join(sorted(list(relevant_global_flags)[:10]))}")
-
-    # Convert all detected WASM_ENABLE_* flags to WAMR_BUILD_* flags
+    # Convert detected WASM_ENABLE_* flags to WAMR_BUILD_* flags
     if all_detected_flags:
         wamr_build_flags = map_wasm_enable_to_wamr_build(all_detected_flags)
-        print(
-            f"\n✅ Final detected WAMR build flags: {', '.join(sorted(wamr_build_flags))}"
-        )
-
-        # Show detection summary
-        print("Detection summary:")
-        for flag in sorted(all_detected_flags):
-            wamr_flag = flag.replace("WASM_ENABLE_", "WAMR_BUILD_")
-            print(f"  {flag} → {wamr_flag}")
-
+        print(f"\n✅ Detected WAMR build flags: {', '.join(sorted(wamr_build_flags))}")
         return wamr_build_flags
     else:
-        print("\n⚠️  No specific WASM_ENABLE flags detected")
+        print("\n⚠️  No WASM_ENABLE flags detected for modified lines")
         print("   Build will use default configuration")
         return set()
 

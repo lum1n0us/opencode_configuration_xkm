@@ -144,8 +144,10 @@ The skill classifies each changed file by:
 4. **Validation**: Stopping and asking for clarification if any files cannot be classified
 
 ### Code Change Classification
-- **CODE CHANGE**: Any *.c, *.h, *.cc files are modified
+- **CODE CHANGE**: Any *.c, *.h, *.cc files are modified (excluding comment-only changes)
 - **NON-CODE CHANGE**: Only non-code files (*.py, *.md, *.bash, etc.) are modified
+
+**💬 Comment Filtering**: Lines that are comments (`//` or `/* */` style) or empty lines are ignored when counting code changes and calculating risk scores. Only actual code modifications affect the analysis.
 
 ### Risk Assessment Factors
 Based on the following rules:

@@ -81,74 +81,66 @@ cmake -S product-mini/platforms/linux -B build/iwasm \
     -DWAMR_BUILD_JIT=1
 ```
 
-## NEW: Enhanced Compilation Flag Detection
+## ⚡ OPTIMIZED: Fast WASM_ENABLE Flag Detection
 
-The skill now uses **comprehensive codebase analysis** to detect compilation flags, going far beyond just analyzing the diff:
+The skill now uses **focused analysis** for speed and simplicity, concentrating only on modified lines:
 
-### Multi-Step Detection Process
+### Simple Detection Process
 
-#### **Step 1: Direct Diff Analysis**
-- Analyzes modified lines in changed files
-- Looks for `#if WASM_ENABLE_XXX` blocks around modifications
+#### **Single Step: Modified Line Analysis**
+- Analyzes only modified lines in changed C/C++ files
+- **💬 Ignores comment lines** - skips `//` and `/* */` style comments
+- Looks for `#if WASM_ENABLE_XXX` blocks that enclose non-comment modifications
+- Maps detected WASM_ENABLE_* flags to WAMR_BUILD_* using generic rule
 
-#### **Step 2: Related File Search**
-- Searches header files in same and parent directories
-- Scans CMake files (`CMakeLists.txt`, `*.cmake`, `*.in`)
-- Finds flag patterns in configuration files
+### Generic Flag Mapping Rule
 
-#### **Step 3: Function Dependency Analysis**
-- Extracts function names modified in the diff
-- Searches entire codebase for these functions
-- Detects if modified functions are used within conditional blocks
+**Primary Rule**: `WASM_ENABLE_XYZ` → `WAMR_BUILD_XYZ`
 
-#### **Step 4: Global Codebase Verification**
-- Scans all C/C++ source files for WASM_ENABLE patterns
-- Builds comprehensive flag usage map
-- Provides verification and fallback detection
+The skill applies this simple transformation first, with special cases handled only when needed:
 
-### Enhanced Detection Examples
+```python
+# Generic mapping (used for all flags)
+WASM_ENABLE_SIMD → WAMR_BUILD_SIMD
+WASM_ENABLE_BULK_MEMORY → WAMR_BUILD_BULK_MEMORY  
+WASM_ENABLE_NEW_FEATURE → WAMR_BUILD_NEW_FEATURE  # Future flags work automatically
 
-#### **Header File Dependencies**
+# Special cases (only when generic rule doesn't apply)
+# Currently: none needed - generic rule covers all known cases
+```
+
+### Focused Detection Examples
+
+#### **Direct Detection with Comment Filtering**
 ```c
-// In modified file: core/iwasm/runtime.c
-void my_function() {
-    // Modified code here
+// In modified file: core/iwasm/aot/aot_runtime.c
+// Diff shows modifications at lines 143, 145, 146
+
+void aot_execute_function() {
+#if WASM_ENABLE_BULK_MEMORY    // ← Line 140
++   // This is a comment         // ← Line 143 (IGNORED - comment)
++   bulk_memory_operation();     // ← Line 145 (ANALYZED - code)
++   /* Another comment */        // ← Line 146 (IGNORED - comment)
+#endif
 }
 
-// In header: core/iwasm/common/wasm_runtime_common.h
-#if WASM_ENABLE_MULTI_MODULE
-    void my_function();  // ← Detects WASM_ENABLE_MULTI_MODULE
-#endif
+// Detection result: WASM_ENABLE_BULK_MEMORY → WAMR_BUILD_BULK_MEMORY
+// Only line 145 (actual code) triggers flag detection
 ```
 
-#### **Function Usage Detection**
-```c
-// Modified function in diff
-+ void new_simd_operation() { ... }
+### ⚡ Performance Benefits
 
-// Used elsewhere in codebase
-#if WASM_ENABLE_SIMD
-    new_simd_operation();  // ← Detects dependency
-#endif
-```
+**Speed Improvements:**
+- **No codebase-wide scanning** - only analyzes modified files
+- **No function dependency analysis** - focuses on direct conditional compilation
+- **No header file searching** - trusts diff analysis only
+- **💬 Comment filtering** - skips comment-only modifications for faster processing
+- **Reduced complexity** - single-step detection process
 
-#### **CMake Configuration Detection**
-```cmake
-# In CMakeLists.txt or *.cmake files
-if(WAMR_BUILD_JIT)
-    set(WASM_ENABLE_JIT 1)  # ← Detects JIT requirement
-endif()
-```
-
-### Comprehensive Flag Discovery
-
-The enhanced system discovers flags through:
-
-1. **Direct conditional compilation** around modified lines
-2. **Header file dependencies** and includes
-3. **Function call analysis** across the entire codebase
-4. **Build system configuration** files
-5. **Global pattern matching** for verification
+**Reliability:**
+- **Generic flag mapping** - works with future WASM_ENABLE_* flags automatically
+- **Focused analysis** - detects flags that actually control modified code (not comments)
+- **Fast execution** - suitable for CI/CD pipelines with time constraints
 
 ## Build Decision Logic
 
