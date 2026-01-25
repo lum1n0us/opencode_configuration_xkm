@@ -1,6 +1,17 @@
+#
+# dependency directories
 bun.lock
 node_modules
-opencode.json
 package.json
-# packages
+
+#
+# don't submit config files
+opencode.json
+
+#
+# skill generated files
+# **/__pycache__/
+
+#
+# skill packages
 *.skill
