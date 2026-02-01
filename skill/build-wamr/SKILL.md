@@ -1,364 +1,274 @@
 ---
 name: build-wamr
-description: Build WebAssembly Micro Runtime (WAMR) components based on detected modifications with MANDATORY clang/toolchain requirements. Intelligently builds iwasm (runtime) and/or wamrc (compiler) depending on changes detected in analysis.md or changes.diff files. Automatically detects and enables compilation flags needed for modified lines. REQUIRES clang/clang++ compilers and valid toolchain configuration. Use after analyze-pr skill or when building WAMR projects with targeted component builds.
+description: Build WebAssembly Micro Runtime (WAMR) components with explicit parameters. Supports building iwasm runtime, wamrc compiler, and unit tests with mandatory clang toolchain requirements. Pure build execution tool that accepts explicit targets and cmake options without modification analysis.
 ---
 
 # Build WAMR
 
 ## Overview
 
-This skill builds WebAssembly Micro Runtime (WAMR) components intelligently based on detected code modifications. It analyzes changes to determine whether to build the iwasm runtime, wamrc compiler, or both, then executes the appropriate CMake build commands with **MANDATORY clang/clang++ compiler requirements** and **comprehensive toolchain validation**.
+This skill builds WebAssembly Micro Runtime (WAMR) components with explicit parameters and targets. It is a **pure build execution tool** that focuses solely on compiling WAMR components using CMake with **mandatory clang/clang++ compiler requirements**.
+
+Unlike analysis-based build tools, this skill requires explicit specification of build targets and cmake options, making it ideal for integration with analysis pipelines or direct usage with known requirements.
 
 ## Quick Start
 
-Build WAMR components based on detected modifications:
+Build WAMR components with explicit parameters:
 
 ```bash
-python scripts/build_wamr.py <inter_dir> [--repo_path <path>]
+# Build iwasm (default target) 
+python scripts/build_wamr.py --repo_path /path/to/wamr
+
+# Build wamrc with custom options
+python scripts/build_wamr.py --target wamrc -DWAMR_BUILD_AOT=1
+
+# Build unit tests with multiple flags  
+python scripts/build_wamr.py --target unit-test -DWAMR_BUILD_SIMD=1 -DWAMR_BUILD_JIT=1
 ```
 
-**Parameters:**
-- `inter_dir`: Directory for temporary files and build outputs
-- `--repo_path`: Path to WAMR git repository (defaults to current directory)
+## Parameters
 
-**MANDATORY Requirements:**
-- CMake installed and available in PATH
-- **🔥 CLANG/CLANG++ COMPILERS REQUIRED** - No fallback to system compilers
-- **🔥 VALID CLANG TOOLCHAIN FILE REQUIRED** - No automatic generation
-- Valid WAMR repository structure
-- Build dependencies for target platform
+### Required
+- None (all parameters have defaults)
 
-## 🔥 STRICT: Mandatory Clang Compiler Integration
+### Optional
+- `--repo_path <path>`: Path to WAMR repository (default: current directory)
+- `--target <target>`: Build target - `iwasm` (default), `wamrc`, or `unit-test`
+- `--build_dir <path>`: Build directory (default: `build-<branch-name>` in current directory)
+- `cmake_options...`: Arbitrary CMake flags (e.g., `-DWAMR_BUILD_JIT=1`)
 
-The skill now ENFORCES **clang/clang++** compilers for all WAMR builds with **zero tolerance for missing requirements**:
+## Build Targets
 
-### Mandatory Toolchain Requirements
-1. **🔥 STRICT SEARCH**: Searches for existing toolchain in required locations:
-   - `tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake`
-   - `build-scripts/clang_toolchain.cmake`  
-   - `cmake/clang_toolchain.cmake`
-   - `toolchain/clang_toolchain.cmake`
-2. **❌ NO FALLBACKS**: Build FAILS immediately if no toolchain file found
-3. **📁 FILE VALIDATION**: Validates toolchain file exists (no content inspection)
-4. **⚡ CLANG REQUIREMENT**: Clang/clang++ must be available in system PATH
+The skill maps targets to their respective source directories automatically:
 
-### Clang Toolchain Configuration
-```cmake
-# Automatically configured clang toolchain
-set(CMAKE_C_COMPILER clang)
-set(CMAKE_CXX_COMPILER clang++)
+| Target | Source Directory | Description |
+|--------|-----------------|-------------|
+| `iwasm` | `product-mini/platforms/linux` | WebAssembly runtime (default) |
+| `wamrc` | `wamr-compiler` | WebAssembly compiler |
+| `unit-test` | `tests/unit` | Unit test executables |
 
-# Optimized build flags
-set(CMAKE_C_FLAGS_DEBUG "-g -O0 -fno-omit-frame-pointer")
-set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
+## Mandatory Requirements
 
-# Enhanced warnings and analysis
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
+### 🔥 Clang Toolchain (STRICT)
+- **clang/clang++** compilers must be available in system PATH
+- Valid clang toolchain file must exist in repository
+- **NO fallbacks** - build fails immediately if requirements not met
 
-# Fuzzing support (if enabled)
-if(WAMR_BUILD_FUZZ_TEST)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer,address")
-endif()
-```
+### Expected Toolchain Location
+The skill requires the clang toolchain file at this **exclusive** location:
+- `build-scripts/clang_toolchain.cmake` (MANDATORY - no alternatives accepted)
 
-### Build Integration Examples
+### Automatic Configuration
+- Always adds `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`
+- Always uses clang toolchain file
+- Build directory defaults to `build-<branch-name>`
 
-#### **With Repository Toolchain:**
+## Usage Examples
+
+### Basic Usage
 ```bash
-# Uses tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake
-cmake -S product-mini/platforms/linux -B build/iwasm \
-    -DCMAKE_TOOLCHAIN_FILE=tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake \
+# Default: Build iwasm in build-<branch> directory
+python scripts/build_wamr.py
+
+# Build specific target
+python scripts/build_wamr.py --target wamrc
+
+# Custom repository path
+python scripts/build_wamr.py --repo_path /path/to/wamr-repo
+```
+
+### Advanced Usage
+```bash
+# Custom build directory with flags
+python scripts/build_wamr.py --build_dir /tmp/wamr-build -DWAMR_BUILD_JIT=1
+
+# Multiple cmake flags
+python scripts/build_wamr.py --target iwasm -DWAMR_BUILD_SIMD=1 -DWAMR_BUILD_AOT=1 -DWAMR_BUILD_BULK_MEMORY=1
+
+# Unit tests with debugging
+python scripts/build_wamr.py --target unit-test -DCMAKE_BUILD_TYPE=Debug
+```
+
+### Integration with Analysis Pipeline
+```bash
+# Step 1: Analyze changes (separate tool/skill)
+analyze_modifications.py pr-123 -> flags.txt
+
+# Step 2: Build with detected flags
+python scripts/build_wamr.py --target iwasm $(cat flags.txt)
+```
+
+## Build Process
+
+For each target, the skill:
+
+1. **Validates repository structure** - ensures WAMR directories exist
+2. **Enforces clang requirements** - checks compiler availability and toolchain file
+3. **Configures with CMake** - runs `cmake -S <source> -B <build> [options]`
+4. **Builds with CMake** - runs `cmake --build <build>`
+5. **Generates status report** - creates `build-wamr_status.md`
+
+### Example Build Commands
+```bash
+# iwasm build
+cmake -S product-mini/platforms/linux -B build-main/iwasm \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-    -DWAMR_BUILD_SIMD=1
-```
-
-#### **With Fallback Toolchain:**
-```bash
-# Creates and uses fallback_clang_toolchain.cmake
-cmake -S product-mini/platforms/linux -B build/iwasm \
-    -DCMAKE_TOOLCHAIN_FILE=fallback_clang_toolchain.cmake \
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DCMAKE_TOOLCHAIN_FILE=build-scripts/clang_toolchain.cmake \
     -DWAMR_BUILD_JIT=1
-```
 
-## ⚡ OPTIMIZED: Fast WASM_ENABLE Flag Detection
+cmake --build build-main/iwasm
 
-The skill now uses **focused analysis** for speed and simplicity, concentrating only on modified lines:
-
-### Simple Detection Process
-
-#### **Single Step: Modified Line Analysis**
-- Analyzes only modified lines in changed C/C++ files
-- **💬 Ignores comment lines** - skips `//` and `/* */` style comments
-- Looks for `#if WASM_ENABLE_XXX` blocks that enclose non-comment modifications
-- Maps detected WASM_ENABLE_* flags to WAMR_BUILD_* using generic rule
-
-### Generic Flag Mapping Rule
-
-**Primary Rule**: `WASM_ENABLE_XYZ` → `WAMR_BUILD_XYZ`
-
-The skill applies this simple transformation first, with special cases handled only when needed:
-
-```python
-# Generic mapping (used for all flags)
-WASM_ENABLE_SIMD → WAMR_BUILD_SIMD
-WASM_ENABLE_BULK_MEMORY → WAMR_BUILD_BULK_MEMORY  
-WASM_ENABLE_NEW_FEATURE → WAMR_BUILD_NEW_FEATURE  # Future flags work automatically
-
-# Special cases (only when generic rule doesn't apply)
-# Currently: none needed - generic rule covers all known cases
-```
-
-### Focused Detection Examples
-
-#### **Direct Detection with Comment Filtering**
-```c
-// In modified file: core/iwasm/aot/aot_runtime.c
-// Diff shows modifications at lines 143, 145, 146
-
-void aot_execute_function() {
-#if WASM_ENABLE_BULK_MEMORY    // ← Line 140
-+   // This is a comment         // ← Line 143 (IGNORED - comment)
-+   bulk_memory_operation();     // ← Line 145 (ANALYZED - code)
-+   /* Another comment */        // ← Line 146 (IGNORED - comment)
-#endif
-}
-
-// Detection result: WASM_ENABLE_BULK_MEMORY → WAMR_BUILD_BULK_MEMORY
-// Only line 145 (actual code) triggers flag detection
-```
-
-### ⚡ Performance Benefits
-
-**Speed Improvements:**
-- **No codebase-wide scanning** - only analyzes modified files
-- **No function dependency analysis** - focuses on direct conditional compilation
-- **No header file searching** - trusts diff analysis only
-- **💬 Comment filtering** - skips comment-only modifications for faster processing
-- **Reduced complexity** - single-step detection process
-
-**Reliability:**
-- **Generic flag mapping** - works with future WASM_ENABLE_* flags automatically
-- **Focused analysis** - detects flags that actually control modified code (not comments)
-- **Fast execution** - suitable for CI/CD pipelines with time constraints
-
-## Build Decision Logic
-
-The skill follows this decision tree for determining what to build:
-
-### 1. Analysis-Based Detection
-If `analysis.md` exists in inter_dir, scans for keywords:
-- **iwasm build triggers**: `core/iwasm`, `iwasm`, `core components`, `runtime`
-- **wamrc build triggers**: `wamr-compiler`, `wamrc`, `compiler`
-
-### 2. Diff-Based Detection
-If `changes.diff` exists in inter_dir, scans for file paths:
-- **iwasm build triggers**: `core/iwasm/`, `core\\iwasm\\`
-- **wamrc build triggers**: `wamr-compiler/`, `wamr_compiler/`
-
-### 3. Fallback Strategy
-If no reference files exist or no modifications detected:
-- Builds **both** iwasm and wamrc components
-
-## Build Components
-
-### iwasm (WebAssembly Runtime)
-When `core/iwasm` modifications are detected:
-
-```bash
-# Configure (with clang toolchain + compile commands export + detected flags)
-cmake -S product-mini/platforms/linux -B ${inter_dir}/build/iwasm \
-    -DCMAKE_TOOLCHAIN_FILE=tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake \
+# wamrc build  
+cmake -S wamr-compiler -B build-main/wamrc \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-    -DWAMR_BUILD_SIMD=1 \
-    -DWAMR_BUILD_BULK_MEMORY=1
-
-# Build
-cmake --build ${inter_dir}/build/iwasm
-```
-
-**Output**:
-- Runtime executable in `${inter_dir}/build/iwasm/`
-- `compile_commands.json` for IDE integration and static analysis
-
-### wamrc (WebAssembly Compiler)
-When `wamr-compiler` modifications are detected:
-
-```bash
-# Configure (with clang toolchain + compile commands export + detected flags)
-cmake -S wamr-compiler -B ${inter_dir}/build/wamrc \
-    -DCMAKE_TOOLCHAIN_FILE=tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake \
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DCMAKE_TOOLCHAIN_FILE=build-scripts/clang_toolchain.cmake \
     -DWAMR_BUILD_AOT=1
 
-# Build
-cmake --build ${inter_dir}/build/wamrc
+cmake --build build-main/wamrc
+
+# unit-test build
+cmake -S tests/unit -B build-main/unit-test \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DCMAKE_TOOLCHAIN_FILE=build-scripts/clang_toolchain.cmake
+
+cmake --build build-main/unit-test
 ```
 
-**Output**:
-- Compiler executable in `${inter_dir}/build/wamrc/`
-- `compile_commands.json` for IDE integration and static analysis
+## Output Structure
 
-## Clang Compiler Benefits
+After successful build:
+```
+<build_dir>/
+├── build-wamr_status.md          # Success/failure status
+├── iwasm/                        # iwasm build directory (if built)
+│   ├── iwasm                     # Runtime executable  
+│   ├── compile_commands.json     # IDE integration
+│   └── [cmake artifacts]
+├── wamrc/                        # wamrc build directory (if built)
+│   ├── wamrc                     # Compiler executable
+│   ├── compile_commands.json     # IDE integration  
+│   └── [cmake artifacts]
+└── unit-test/                    # unit tests directory (if built)
+    ├── [test executables]
+    ├── compile_commands.json     # IDE integration
+    └── [cmake artifacts]
+```
 
-Using clang/clang++ provides several advantages for WAMR builds:
+## Status Report Format
 
-### **Better Optimization**
-- Advanced optimization passes for WebAssembly code generation
-- Superior cross-platform compatibility
-- Consistent behavior across different host platforms
-
-### **Enhanced Analysis**
-- Better static analysis capabilities
-- Improved warning messages and error diagnostics
-- Support for sanitizers (AddressSanitizer, UndefinedBehaviorSanitizer)
-
-### **Fuzzing Support**
-- Built-in fuzzing capabilities with `-fsanitize=fuzzer`
-- Integration with WAMR's existing fuzz testing infrastructure
-- Better coverage analysis and bug detection
-
-### **Development Tools**
-- Excellent integration with clang-tidy static analyzer
-- Support for clang-format code formatting
-- Compatible with LLVM toolchain ecosystem
-
-## Repository Validation
-
-The skill validates WAMR repository structure by checking for:
-- `core/iwasm/` - Runtime source directory
-- `wamr-compiler/` - Compiler source directory
-- `product-mini/platforms/linux/` - Linux platform build files
-
-Missing directories will cause build failure with descriptive error message.
-
-## Output Files
-
-### Status Report (`build-wamr_status.md`)
-**Success format:**
+### Success
 ```
 SUCCESS
 ```
 
-**Failure format:**
+### Failure
+```
+FAIL
+<error message>
+```
+
+## Error Scenarios
+
+### Missing Clang Compilers
+```
+❌ MANDATORY REQUIREMENT FAILED: Clang/clang++ compilers are required but not found in PATH.
+   Please install clang and ensure both 'clang' and 'clang++' are available in your system PATH.
+```
+
+### Missing Toolchain File
+```
+❌ MANDATORY REQUIREMENT FAILED: build-scripts/clang_toolchain.cmake not found.
+   This is the exclusive location required for the clang toolchain file.
+   Please ensure clang_toolchain.cmake exists at: build-scripts/clang_toolchain.cmake
+```
+
+### Invalid Repository
 ```
 FAIL
 Repository does not appear to be a WAMR project. Missing required paths: core/iwasm
 ```
 
-### Build Artifacts
-- `${inter_dir}/build/iwasm/` - iwasm runtime build outputs
-- `${inter_dir}/build/wamrc/` - wamrc compiler build outputs
-
-## Integration Examples
-
-**With analyze-pr workflow:**
-```bash
-# 1. Fetch PR data
-python scripts/fetch_pr.py 123 ./pr_data
-
-# 2. Analyze modifications
-python scripts/analyze_pr.py 123 ./pr_data
-
-# 3. Build based on analysis
-python scripts/build_wamr.py ./pr_data --repo_path /path/to/wamr
-```
-
-**Standalone usage:**
-```bash
-# Build all components (no analysis files)
-python scripts/build_wamr.py ./build_output
-
-# Build with existing diff
-cp changes.diff ./build_data/
-python scripts/build_wamr.py ./build_data
-```
-
-**Custom repository path:**
-```bash
-python scripts/build_wamr.py ./outputs --repo_path /path/to/wamr-repo
-```
-
-## Error Handling
-
-**🔥 NEW STRICT FAILURE SCENARIOS:**
-- **❌ Missing Clang**: Build stops immediately if clang/clang++ not in PATH
-- **❌ No Toolchain File**: Build stops immediately if no valid toolchain found
-
-**Traditional failure scenarios:**
-- **Invalid repository**: Validates WAMR directory structure
-- **Missing CMake**: Clear error if cmake command not found
-- **Build failures**: Captures cmake output and error details
-- **Permission issues**: Handles directory creation and access errors
-
-### New Strict Error Messages
-```
-❌ MANDATORY REQUIREMENT FAILED: Clang/clang++ compilers are required but not found in PATH.
-   Please install clang and ensure both 'clang' and 'clang++' are available in your system PATH.
-   On Ubuntu/Debian: sudo apt install clang
-   On CentOS/RHEL: sudo yum install clang  
-   On macOS: xcode-select --install
-
-❌ MANDATORY REQUIREMENT FAILED: Clang toolchain file is required but not found.
-   Expected locations:
-   - tests/fuzz/wasm-mutator-fuzz/clang_toolchain.cmake
-   - build-scripts/clang_toolchain.cmake
-   - cmake/clang_toolchain.cmake
-   - toolchain/clang_toolchain.cmake
-```
-
-### Traditional Error Messages
+### Build Failure
 ```
 FAIL
-Repository does not appear to be a WAMR project. Missing required paths: wamr-compiler
-
-FAIL
-Command failed: cmake -S wamr-compiler -B /tmp/build/wamrc
-Return code: 1
-Stderr: CMake Error: The source directory does not exist.
+Command failed: cmake --build build-main/iwasm
+Return code: 2
+Stderr: [cmake error details]
 ```
 
-## Build Output Structure
+## Installation Requirements
 
-After successful build:
-```
-${inter_dir}/
-├── build-wamr_status.md          # Success/failure status
-├── build/
-│   ├── iwasm/                     # iwasm build directory
-│   │   ├── iwasm                  # Runtime executable
-│   │   ├── compile_commands.json  # IDE integration file
-│   │   └── [cmake artifacts]      # Build files
-│   └── wamrc/                     # wamrc build directory
-│       ├── wamrc                  # Compiler executable
-│       ├── compile_commands.json  # IDE integration file
-│       └── [cmake artifacts]      # Build files
-└── [analysis.md/changes.diff]     # Input analysis files
+### System Dependencies
+```bash
+# Ubuntu/Debian
+sudo apt install clang cmake
+
+# CentOS/RHEL  
+sudo yum install clang cmake
+
+# macOS
+xcode-select --install
+brew install cmake
 ```
 
-The `compile_commands.json` files generated by the `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` flag provide:
-- IDE integration for code completion and navigation
-- Static analysis tool support (clang-tidy, etc.)
-- Language server protocol (LSP) compatibility
+### Repository Requirements
+- Valid WAMR repository with standard directory structure
+- Clang toolchain file at `build-scripts/clang_toolchain.cmake` (mandatory location)
+- CMakeLists.txt files in target source directories
 
-## 🔥 STRICT MODE: What Changed
+## Integration Patterns
 
-This skill now operates with **ZERO TOLERANCE** for missing requirements:
+### With Analysis Skills
+```bash
+# 1. Detect modifications (separate skill)
+analyze-pr -> analysis.md
 
-### ❌ **REMOVED FEATURES:**
-- ~~Fallback to system compilers~~ → **MANDATORY clang/clang++**
-- ~~Auto-generation of toolchain files~~ → **MANDATORY existing toolchain**
-- ~~Graceful degradation~~ → **FAIL FAST on missing requirements**
+# 2. Extract flags from analysis  
+grep "WAMR_BUILD" analysis.md > flags.txt
 
-### ✅ **NEW ENFORCEMENT:**
-- **Clang availability check** → Exception thrown if not found
-- **Toolchain file existence** → File must exist in expected locations
-- **Build reliability** → Guaranteed clang-based builds or immediate failure
+# 3. Build with extracted flags
+python scripts/build_wamr.py --target iwasm $(cat flags.txt)
+```
 
-### 🎯 **Benefits of Strict Mode:**
-- **Consistent builds**: All WAMR builds use identical clang toolchain
-- **Early failure detection**: Problems caught before build starts
-- **Reproducible results**: Eliminates compiler variation issues
-- **CI/CD reliability**: Predictable behavior in automated environments
+### Standalone Usage
+```bash
+# Direct usage with known requirements
+python scripts/build_wamr.py --target iwasm -DWAMR_BUILD_JIT=1 -DWAMR_BUILD_SIMD=1
+```
 
-The skill provides targeted, efficient building of WAMR components based on intelligent modification detection with **guaranteed clang toolchain compliance**, making it ideal for strict CI/CD pipelines and development workflows.
+### CI/CD Integration
+```bash
+# Pipeline step
+- name: Build WAMR iwasm
+  run: python scripts/build_wamr.py --target iwasm --build_dir ${{ runner.temp }}/wamr-build
+```
+
+## What This Skill Does NOT Do
+
+This skill is **pure build execution** and does NOT:
+- ❌ Analyze code modifications or diffs
+- ❌ Auto-detect required compilation flags
+- ❌ Parse `changes.diff` or `analysis.md` files  
+- ❌ Determine what components to build based on file changes
+- ❌ Run compiled executables or tests
+
+For modification analysis and intelligent flag detection, use complementary analysis skills before invoking this build skill.
+
+## Benefits of Pure Build Approach
+
+### Predictability
+- **Explicit parameters** - no hidden logic or assumptions
+- **Deterministic builds** - same inputs always produce same outputs
+- **Clear failure modes** - immediate feedback on missing requirements
+
+### Integration Flexibility
+- **Pipeline-friendly** - easily integrates with analysis tools
+- **Composable** - combine with other skills for complex workflows
+- **Testable** - simple to unit test and validate
+
+### Performance
+- **Fast execution** - no analysis overhead
+- **Minimal dependencies** - only cmake and clang required
+- **Efficient** - builds exactly what's requested
+
+This skill provides reliable, fast WAMR component builds with strict quality requirements, making it ideal for both development workflows and CI/CD pipelines.
