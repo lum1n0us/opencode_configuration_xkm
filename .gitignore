@@ -23,6 +23,7 @@ oh-my-opencode.json
 #
 # skill packages
 *.skill
+skills/*
 
 # Generation of planning-with-files
 findings.md
