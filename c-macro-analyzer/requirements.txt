@@ -1,0 +1,4 @@
+# For development
+pytest>=7.0
+black>=23.0
+ruff>=0.1.0
