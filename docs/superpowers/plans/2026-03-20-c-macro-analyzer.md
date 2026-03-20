@@ -8,17 +8,19 @@
 
 **Tech Stack:** Python 3.8+, standard library only (no external dependencies), pytest for testing
 
+**Project Location:** `./c-macro-analyzer/` (standalone Python project at root level)
+
 ---
 
 ## File Structure
 
 **Source files:**
-- `src/macro_analyzer/__init__.py` - Package initialization
-- `src/macro_analyzer/expression.py` - Expression parser and evaluator
-- `src/macro_analyzer/symbols.py` - Symbol table management
-- `src/macro_analyzer/processor.py` - Main file processor with condition stack
-- `src/macro_analyzer/cli.py` - Command-line interface
-- `src/macro_analyzer/__main__.py` - Entry point for `python -m macro_analyzer`
+- `macro_analyzer/__init__.py` - Package initialization
+- `macro_analyzer/expression.py` - Expression parser and evaluator
+- `macro_analyzer/symbols.py` - Symbol table management
+- `macro_analyzer/processor.py` - Main file processor with condition stack
+- `macro_analyzer/cli.py` - Command-line interface
+- `macro_analyzer/__main__.py` - Entry point for `python -m macro_analyzer`
 
 **Test files:**
 - `tests/test_expression.py` - Expression parser/evaluator tests
@@ -37,7 +39,7 @@
 ### Task 1: Create project structure
 
 **Files:**
-- Create: `src/macro_analyzer/__init__.py`
+- Create: `macro_analyzer/__init__.py`
 - Create: `pyproject.toml`
 - Create: `requirements.txt`
 - Create: `README.md`
@@ -45,7 +47,7 @@
 - [ ] **Step 1: Create package structure**
 
 ```bash
-mkdir -p src/macro_analyzer tests/samples
+mkdir -p macro_analyzer tests/samples
 ```
 
 - [ ] **Step 2: Create __init__.py**
@@ -90,7 +92,7 @@ macro-analyzer = "macro_analyzer.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["."]
 ```
 
 - [ ] **Step 4: Create requirements.txt**
@@ -107,7 +109,7 @@ ruff>=0.1.0
 ```markdown
 # C/C++ Macro Analyzer
 
-Analyze which preprocessor macros control a specific line in C/C++ source files.
+A Python tool that analyzes C/C++ source files to determine which preprocessor macros control a specific line of code. Given a file path and line number, it outputs JSON with the combined logical expression of all controlling macros.
 
 ## Installation
 
@@ -121,7 +123,18 @@ pip install -e .
 macro-analyzer path/to/file.c 42
 ```
 
-Outputs JSON with combined logical expression of all controlling macros.
+Example output:
+```json
+{
+  "file": "example.c",
+  "line": 42,
+  "macros": [
+    {"name": "DEBUG", "condition": "defined"},
+    {"name": "VERSION", "condition": "> 1"}
+  ],
+  "combined_expression": "defined(DEBUG) && VERSION > 1"
+}
+```
 
 ## Development
 
@@ -133,8 +146,8 @@ pip install -e ".[dev]"
 pytest
 
 # Format code
-black src tests
-ruff check --fix src tests
+black macro_analyzer tests
+ruff check --fix macro_analyzer tests
 ```
 
 ## License
@@ -145,14 +158,14 @@ MIT
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/macro_analyzer/__init__.py pyproject.toml requirements.txt README.md
+git add macro_analyzer/__init__.py pyproject.toml requirements.txt README.md
 git commit -m "chore: initial project structure"
 ```
 
 ### Task 2: Expression parser and evaluator
 
 **Files:**
-- Create: `src/macro_analyzer/expression.py`
+- Create: `macro_analyzer/expression.py`
 - Create: `tests/test_expression.py`
 
 - [ ] **Step 1: Write failing test for tokenizer**
@@ -160,7 +173,7 @@ git commit -m "chore: initial project structure"
 ```python
 # tests/test_expression.py
 import pytest
-from macro_analyzer.expression import tokenize_expression
+    from macro_analyzer.expression import tokenize_expression
 
 def test_tokenize_simple_expression():
     tokens = tokenize_expression("defined(DEBUG)")
@@ -185,7 +198,7 @@ Expected: FAIL with "ModuleNotFoundError: No module named 'macro_analyzer'"
 - [ ] **Step 3: Implement tokenizer**
 
 ```python
-# src/macro_analyzer/expression.py
+# macro_analyzer/expression.py
 import re
 
 def tokenize_expression(expr: str) -> list[str]:
@@ -259,7 +272,7 @@ Expected: FAIL with "NameError: name 'parse_expression' is not defined"
 - [ ] **Step 7: Implement AST node class and parser**
 
 ```python
-# src/macro_analyzer/expression.py
+# macro_analyzer/expression.py
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -393,7 +406,7 @@ Expected: FAIL with "NameError: name 'evaluate_expression' is not defined"
 - [ ] **Step 11: Implement expression evaluator**
 
 ```python
-# src/macro_analyzer/expression.py
+# macro_analyzer/expression.py
 def evaluate_expression(expr: str, symbols: dict) -> int:
     """Evaluate a C preprocessor expression.
     
@@ -479,7 +492,7 @@ Expected: PASS
 - [ ] **Step 13: Commit**
 
 ```bash
-git add src/macro_analyzer/expression.py tests/test_expression.py
+git add macro_analyzer/expression.py tests/test_expression.py
 git commit -m "feat: expression parser and evaluator"
 ```
 
@@ -488,7 +501,7 @@ git commit -m "feat: expression parser and evaluator"
 ### Task 3: Symbol table management
 
 **Files:**
-- Create: `src/macro_analyzer/symbols.py`
+- Create: `macro_analyzer/symbols.py`
 - Create: `tests/test_symbols.py`
 
 - [ ] **Step 1: Write failing test for symbol table**
@@ -496,7 +509,7 @@ git commit -m "feat: expression parser and evaluator"
 ```python
 # tests/test_symbols.py
 import pytest
-from macro_analyzer.symbols import SymbolTable
+    from macro_analyzer.symbols import SymbolTable
 
 def test_symbol_table_basic():
     table = SymbolTable()
@@ -528,7 +541,7 @@ Expected: FAIL with "ModuleNotFoundError: No module named 'macro_analyzer.symbol
 - [ ] **Step 3: Implement symbol table**
 
 ```python
-# src/macro_analyzer/symbols.py
+# macro_analyzer/symbols.py
 class SymbolTable:
     """Manages macro definitions and their values."""
     
@@ -619,14 +632,14 @@ Expected: PASS (should use existing expression module)
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/macro_analyzer/symbols.py tests/test_symbols.py
+git add macro_analyzer/symbols.py tests/test_symbols.py
 git commit -m "feat: symbol table management"
 ```
 
 ### Task 4: Condition stack and state management
 
 **Files:**
-- Create: `src/macro_analyzer/processor.py`
+- Create: `macro_analyzer/processor.py`
 - Create: `tests/test_processor.py`
 
 - [ ] **Step 1: Write failing test for condition stack**
@@ -634,7 +647,7 @@ git commit -m "feat: symbol table management"
 ```python
 # tests/test_processor.py
 import pytest
-from macro_analyzer.processor import ConditionStack, ConditionEntry
+    from macro_analyzer.processor import ConditionStack, ConditionEntry
 
 def test_condition_stack_basic():
     stack = ConditionStack()
@@ -680,7 +693,7 @@ Expected: FAIL with "ModuleNotFoundError: No module named 'macro_analyzer.proces
 - [ ] **Step 3: Implement condition stack**
 
 ```python
-# src/macro_analyzer/processor.py
+# macro_analyzer/processor.py
 from dataclasses import dataclass
 from typing import List, Optional
 from .expression import evaluate_expression
@@ -817,7 +830,7 @@ Expected: FAIL with "NameError: name 'combine_conditions' is not defined"
 - [ ] **Step 7: Implement condition combination**
 
 ```python
-# src/macro_analyzer/processor.py
+# macro_analyzer/processor.py
 def combine_conditions(conditions: List[str]) -> str:
     """Combine multiple conditions with && operator.
     
@@ -860,7 +873,7 @@ Expected: PASS
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/macro_analyzer/processor.py tests/test_processor.py
+git add macro_analyzer/processor.py tests/test_processor.py
 git commit -m "feat: condition stack and combination"
 ```
 
@@ -869,7 +882,7 @@ git commit -m "feat: condition stack and combination"
 ### Task 5: File processor with directive handling
 
 **Files:**
-- Modify: `src/macro_analyzer/processor.py`
+- Modify: `macro_analyzer/processor.py`
 - Create: `tests/samples/simple.c`
 
 - [ ] **Step 1: Create sample test file**
@@ -897,7 +910,7 @@ git commit -m "feat: condition stack and combination"
 ```python
 # tests/test_processor.py
 import pytest
-from macro_analyzer.processor import FileProcessor
+    from macro_analyzer.processor import FileProcessor
 
 def test_file_processor_basic():
     processor = FileProcessor()
@@ -927,7 +940,7 @@ Expected: FAIL with "NameError: name 'FileProcessor' is not defined"
 - [ ] **Step 4: Implement FileProcessor class**
 
 ```python
-# src/macro_analyzer/processor.py
+# macro_analyzer/processor.py
 import re
 from typing import Dict, Any
 from .symbols import SymbolTable
@@ -1141,6 +1154,227 @@ Expected: PASS (basic check)
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/macro_analyzer/processor.py tests/samples/simple.c tests/samples/nested.c
+git add macro_analyzer/processor.py tests/samples/simple.c tests/samples/nested.c
 git commit -m "feat: file processor with directive handling"
+```
+
+## Chunk 4: CLI and Integration
+
+### Task 6: Command-line interface
+
+**Files:**
+- Create: `macro_analyzer/cli.py`
+- Create: `macro_analyzer/__main__.py`
+- Create: `tests/test_cli.py`
+
+- [ ] **Step 1: Write failing test for CLI**
+
+```python
+# tests/test_cli.py
+import pytest
+import subprocess
+import json
+import tempfile
+import os
+
+def test_cli_basic_usage():
+    # Create a simple test file
+    test_content = '''#define DEBUG
+#ifdef DEBUG
+  test_function();
+#endif
+'''
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False) as f:
+        f.write(test_content)
+        test_file = f.name
+    
+    try:
+        # Run CLI on line 3
+        result = subprocess.run(
+            ['python', '-m', 'macro_analyzer', test_file, '3'],
+            capture_output=True,
+            text=True
+        )
+        assert result.returncode == 0
+        
+        # Parse JSON output
+        output = json.loads(result.stdout)
+        assert output['file'] == test_file
+        assert output['line'] == 3
+        assert 'DEBUG' in output['combined_expression']
+    finally:
+        os.unlink(test_file)
+
+def test_cli_missing_file():
+    result = subprocess.run(
+        ['python', '-m', 'macro_analyzer', 'nonexistent.c', '1'],
+        capture_output=True,
+        text=True
+    )
+    assert result.returncode != 0
+    assert 'error' in result.stderr.lower()
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+```bash
+pytest tests/test_cli.py::test_cli_basic_usage -v
+```
+Expected: FAIL with "ModuleNotFoundError: No module named 'macro_analyzer'"
+
+- [ ] **Step 3: Implement CLI**
+
+```python
+# macro_analyzer/cli.py
+import argparse
+import json
+import sys
+from .processor import FileProcessor
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Analyze C/C++ preprocessor macro control of source lines'
+    )
+    parser.add_argument('file', help='Path to C/C++ source file')
+    parser.add_argument('line', type=int, help='Line number to analyze (1-indexed)')
+    parser.add_argument('--output', '-o', choices=['json', 'text'], default='json',
+                       help='Output format (default: json)')
+    
+    args = parser.parse_args()
+    
+    try:
+        processor = FileProcessor()
+        result = processor.analyze_file(args.file, args.line)
+        
+        if args.output == 'json':
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"File: {result['file']}")
+            print(f"Line: {result['line']}")
+            print(f"Macros: {len(result['macros'])}")
+            print(f"Expression: {result['combined_expression']}")
+        
+        return 0
+    except FileNotFoundError:
+        print(f"Error: File not found: {args.file}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+if __name__ == '__main__':
+    sys.exit(main())
+```
+
+- [ ] **Step 4: Create __main__.py**
+
+```python
+# macro_analyzer/__main__.py
+from .cli import main
+
+if __name__ == '__main__':
+    main()
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+```bash
+pytest tests/test_cli.py::test_cli_basic_usage -v
+```
+Expected: PASS
+
+- [ ] **Step 6: Write failing test for integration**
+
+```python
+# tests/test_integration.py
+import pytest
+import json
+import tempfile
+import os
+from macro_analyzer.processor import FileProcessor
+
+def test_integration_complex_file():
+    # Create complex test file
+    test_content = '''#define PLATFORM "linux"
+#define VERSION 3
+
+#ifdef DEBUG
+  #if VERSION > 2
+    advanced_debug();
+  #endif
+#endif
+
+#if PLATFORM == "windows"
+  windows_code();
+#elif PLATFORM == "linux"
+  linux_code();
+#else
+  other_code();
+#endif
+'''
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False) as f:
+        f.write(test_content)
+        test_file = f.name
+    
+    try:
+        processor = FileProcessor()
+        
+        # Test line 5 (advanced_debug)
+        result = processor.analyze_file(test_file, 5)
+        assert result['line'] == 5
+        assert 'DEBUG' in result['combined_expression']
+        assert 'VERSION > 2' in result['combined_expression']
+        
+        # Test line 12 (linux_code)
+        result = processor.analyze_file(test_file, 12)
+        assert result['line'] == 12
+        assert 'PLATFORM == "linux"' in result['combined_expression']
+        
+    finally:
+        os.unlink(test_file)
+```
+
+- [ ] **Step 7: Run test to verify it passes**
+
+```bash
+pytest tests/test_integration.py::test_integration_complex_file -v
+```
+Expected: PASS
+
+- [ ] **Step 8: Create complex.c sample file**
+
+```c
+// tests/samples/complex.c
+#define ARCH "x86_64"
+#define OPTIMIZE 1
+#define DEBUG_LEVEL 3
+
+#if defined(DEBUG) && DEBUG_LEVEL > 1
+  #if ARCH == "x86_64"
+    #if OPTIMIZE
+      optimized_x86_debug();
+    #else
+      plain_x86_debug();
+    #endif
+  #elif ARCH == "arm"
+    arm_debug();
+  #else
+    generic_debug();
+  #endif
+#endif
+
+#ifndef RELEASE
+  development_code();
+#endif
+
+#if (PLATFORM == "linux" || PLATFORM == "darwin") && !EMBEDDED
+  desktop_feature();
+#endif
+```
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add macro_analyzer/cli.py macro_analyzer/__main__.py tests/test_cli.py tests/test_integration.py tests/samples/complex.c
+git commit -m "feat: CLI and integration tests"
 ```
