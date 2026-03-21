@@ -27,7 +27,9 @@ A Python tool that analyzes C/C++ source files to determine which preprocessor m
 
 ## Features
 
-- **Full preprocessor simulation**: Tracks macro definitions, evaluates conditions, handles nested `#if` blocks
+- **PCPP-based preprocessor**: Uses Python C Preprocessor (pcpp) library for accurate C99 preprocessor simulation
+- **Three-level logging**: `-v` (verbose), `-vv` (debug), `-vvv` (trace) for detailed debugging
+- **Full condition tracking**: Handles nested `#if` blocks, `#elif`, `#else`, `#ifdef`, `#ifndef`
 - **Expression parsing**: Supports `defined()`, comparisons (`==`, `>`, `<`), logical operators (`&&`, `||`, `!`)
 - **String comparison**: Handles `PLATFORM == "linux"` style comparisons
 - **Condition combination**: Outputs combined logical expression for all active conditions
@@ -70,6 +72,11 @@ macro-analyzer src/main.c 123
 
 # Text output
 macro-analyzer src/main.c 123 --output text
+
+# Verbose logging (-v = INFO, -vv = DEBUG, -vvv = TRACE)
+macro-analyzer src/main.c 123 -v
+macro-analyzer src/main.c 123 -vv
+macro-analyzer src/main.c 123 -vvv
 ```
 
 ### Example output
@@ -169,7 +176,7 @@ pip install -e ".[dev]"
 pytest
 
 # Run specific test file
-pytest tests/test_processor.py -v
+pytest tests/test_analyzer.py -v
 
 # Format code
 black macro_analyzer tests
@@ -181,15 +188,13 @@ ruff check --fix macro_analyzer tests
 c-macro-analyzer/
 ├── macro_analyzer/
 │   ├── __init__.py
-│   ├── expression.py    # Expression parser and evaluator
-│   ├── symbols.py       # Symbol table management
-│   ├── processor.py     # File processor and condition stack
-│   ├── cli.py           # Command-line interface
+│   ├── analyzer.py      # PCPP-based analyzer with condition tracking
+│   ├── logging.py       # Three-level logging system
+│   ├── cli.py           # Command-line interface with -v/-vv/-vvv options
 │   └── __main__.py      # Module entry point
 ├── tests/
-│   ├── test_expression.py
-│   ├── test_symbols.py
-│   ├── test_processor.py
+│   ├── test_analyzer.py
+│   ├── test_logging.py
 │   ├── test_cli.py
 │   ├── test_integration.py
 │   └── samples/         # Test C files
