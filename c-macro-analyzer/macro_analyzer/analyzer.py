@@ -6,6 +6,8 @@ import pcpp
 
 from .logging import LogLevel, MacroLogger
 
+_HEADER_GUARD_PATTERN = re.compile(r".*_H(_[A-Z0-9_]*)?$")
+
 
 @dataclass
 class ConditionContext:
@@ -22,6 +24,18 @@ class PCPPAnalyzer(pcpp.Preprocessor):
     """PCPP-based macro analyzer with condition tracking."""
 
     _RESERVED_WORDS = frozenset({"defined", "and", "or", "not"})
+
+    def _is_header_guard(self, name: str) -> bool:
+        """Check if a macro name matches header guard pattern."""
+        return bool(_HEADER_GUARD_PATTERN.match(name))
+
+    def _is_valid_macro(self, name: str, found_names: set) -> bool:
+        """Check if a macro should be included in results."""
+        return (
+            name not in found_names
+            and name not in self._RESERVED_WORDS
+            and not self._is_header_guard(name)
+        )
 
     def __init__(self, log_level: LogLevel = LogLevel.QUIET):
         super().__init__()
@@ -133,17 +147,10 @@ class PCPPAnalyzer(pcpp.Preprocessor):
         all_matches = []
         found_names = set()
 
-        def is_header_guard(name: str) -> bool:
-            return bool(re.match(r".*_H(_[A-Z0-9_]*)?$", name))
-
         # Pattern for defined(macro) or !defined(macro)
         for match in re.finditer(r"(!?\s*defined)\s*\(\s*(\w+)\s*\)", expression):
             name = match.group(2)
-            if (
-                name not in found_names
-                and name not in self._RESERVED_WORDS
-                and not is_header_guard(name)
-            ):
+            if self._is_valid_macro(name, found_names):
                 all_matches.append(
                     {
                         "pos": match.start(),
@@ -159,11 +166,7 @@ class PCPPAnalyzer(pcpp.Preprocessor):
             r"(\w+)\s*(==|!=|<|>|<=|>=)\s*([^\s&|()]+)", expression
         ):
             name = match.group(1)
-            if (
-                name not in found_names
-                and name not in self._RESERVED_WORDS
-                and not is_header_guard(name)
-            ):
+            if self._is_valid_macro(name, found_names):
                 all_matches.append(
                     {
                         "pos": match.start(),
@@ -181,11 +184,7 @@ class PCPPAnalyzer(pcpp.Preprocessor):
             r"(?<![a-zA-Z0-9_])([a-zA-Z_]\w*)(?![a-zA-Z0-9_(])", expr_stripped
         ):
             name = match.group(1)
-            if (
-                name not in found_names
-                and name not in self._RESERVED_WORDS
-                and not is_header_guard(name)
-            ):
+            if self._is_valid_macro(name, found_names):
                 all_matches.append(
                     {
                         "pos": match.start(),
