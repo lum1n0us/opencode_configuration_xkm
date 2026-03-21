@@ -21,6 +21,8 @@ class ConditionContext:
 class PCPPAnalyzer(pcpp.Preprocessor):
     """PCPP-based macro analyzer with condition tracking."""
 
+    _RESERVED_WORDS = frozenset({"defined", "and", "or", "not"})
+
     def __init__(self, log_level: LogLevel = LogLevel.QUIET):
         super().__init__()
         self.logger = MacroLogger(log_level)
@@ -134,7 +136,7 @@ class PCPPAnalyzer(pcpp.Preprocessor):
         # Pattern for defined(macro) or !defined(macro)
         for match in re.finditer(r"(!?\s*defined)\s*\(\s*(\w+)\s*\)", expression):
             name = match.group(2)
-            if name not in found_names and name not in ["defined", "and", "or", "not"]:
+            if name not in found_names and name not in self._RESERVED_WORDS:
                 all_matches.append(
                     {
                         "pos": match.start(),
@@ -146,9 +148,11 @@ class PCPPAnalyzer(pcpp.Preprocessor):
                 found_names.add(name)
 
         # Pattern for comparison expressions: MACRO OP value
-        for match in re.finditer(r"(\w+)\s*(==|!=|<|>|<=|>=)\s*([^\s&|]+)", expression):
+        for match in re.finditer(
+            r"(\w+)\s*(==|!=|<|>|<=|>=)\s*([^\s&|()]+)", expression
+        ):
             name = match.group(1)
-            if name not in found_names and name not in ["defined", "and", "or", "not"]:
+            if name not in found_names and name not in self._RESERVED_WORDS:
                 all_matches.append(
                     {
                         "pos": match.start(),
@@ -166,7 +170,7 @@ class PCPPAnalyzer(pcpp.Preprocessor):
             r"(?<![a-zA-Z0-9_])([a-zA-Z_]\w*)(?![a-zA-Z0-9_(])", expr_stripped
         ):
             name = match.group(1)
-            if name not in found_names and name not in ["defined", "and", "or", "not"]:
+            if name not in found_names and name not in self._RESERVED_WORDS:
                 all_matches.append(
                     {
                         "pos": match.start(),

@@ -159,3 +159,27 @@ def test_extract_macros_structured():
     ]
     # Note: !defined(OLD_API) should still be categorized as "defined"
     assert result == expected, f"Expected {expected}, got {result}"
+
+    # Test 4: Negation handling
+    expression = "!defined(DISABLED)"
+    result = analyzer._extract_macros(expression)
+    expected = [
+        {"name": "DISABLED", "condition": "defined", "expression": "defined(DISABLED)"}
+    ]
+    assert result == expected, f"Expected {expected}, got {result}"
+
+    # Test 5: Edge cases
+    # Empty string
+    assert analyzer._extract_macros("") == [], "Expected empty list for empty string"
+
+    # String literal (should not match content inside quotes)
+    expression = 'PLATFORM == "LINUX_VERSION"'
+    result = analyzer._extract_macros(expression)
+    expected = [
+        {
+            "name": "PLATFORM",
+            "condition": "comparison",
+            "expression": 'PLATFORM == "LINUX_VERSION"',
+        }
+    ]
+    assert result == expected, f"Expected {expected}, got {result}"
