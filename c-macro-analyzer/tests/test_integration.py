@@ -34,7 +34,8 @@ def test_integration_complex_file():
         # Test line 5 (advanced_debug) - DEBUG not defined
         result = processor.analyze_file(test_file, 5)
         assert result["line"] == 5
-        assert result["combined_expression"] == ""
+        # Should show the condition chain even though DEBUG is not defined
+        assert result["combined_expression"] == "defined(DEBUG) && (VERSION > 2)"
 
         # Test line 12 (linux_code) - PLATFORM == "linux" is true
         result = processor.analyze_file(test_file, 12)

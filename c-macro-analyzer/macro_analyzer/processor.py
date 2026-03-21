@@ -10,9 +10,11 @@ class ConditionEntry:
     """Represents a conditional block in the stack."""
 
     condition: str  # Original condition string
-    active: bool  # Whether this branch is active
+    active: bool  # Whether this branch is active (considering parent conditions)
     has_true_branch: bool  # Whether a true branch was already taken
     is_else: bool = False  # Whether this is an else branch
+    # Note: 'active' means the code in this branch should be processed
+    # 'condition' is the logical expression regardless of activity
 
 
 class ConditionStack:
@@ -79,14 +81,26 @@ class ConditionStack:
         return True
 
     def get_active_conditions(self) -> List[str]:
-        """Get all active conditions from the stack.
+        """Get conditions from active entries in the stack.
 
         Returns:
-            List of condition strings for active entries
+            List of condition strings for entries that are active
         """
         conditions = []
         for entry in self._stack:
             if entry.active and entry.condition:
+                conditions.append(entry.condition)
+        return conditions
+
+    def get_condition_chain(self) -> List[str]:
+        """Get all conditions in the stack, regardless of activity.
+
+        Returns:
+            List of all condition strings in the stack
+        """
+        conditions = []
+        for entry in self._stack:
+            if entry.condition:  # Include all non-empty conditions
                 conditions.append(entry.condition)
         return conditions
 
@@ -177,8 +191,10 @@ class FileProcessor:
 
             if i == target_line:
                 # Found target line
-                active_conditions = self.stack.get_active_conditions()
-                combined = combine_conditions(active_conditions)
+                # Use condition chain (all conditions) not just active conditions
+                # This gives us the complete logical expression controlling the line
+                condition_chain = self.stack.get_condition_chain()
+                combined = combine_conditions(condition_chain)
 
                 # Convert #ifdef to defined() for consistency
                 combined = self._normalize_condition(combined)
