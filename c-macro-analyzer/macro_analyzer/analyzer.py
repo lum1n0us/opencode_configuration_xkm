@@ -126,17 +126,60 @@ class PCPPAnalyzer(pcpp.Preprocessor):
             expression: Combined logical expression
 
         Returns:
-            List of dicts with name and condition for each macro
+            List of dicts with name, condition, and expression for each macro
         """
-        macros = []
+        all_matches = []
+        found_names = set()
 
-        # Look for defined(macro) patterns
-        defined_pattern = re.compile(r"defined\s*\(\s*(\w+)\s*\)")
-        matches = defined_pattern.findall(expression)
-        for macro in matches:
-            macros.append({"name": macro, "condition": "defined"})
+        # Pattern for defined(macro) or !defined(macro)
+        for match in re.finditer(r"(!?\s*defined)\s*\(\s*(\w+)\s*\)", expression):
+            name = match.group(2)
+            if name not in found_names and name not in ["defined", "and", "or", "not"]:
+                all_matches.append(
+                    {
+                        "pos": match.start(),
+                        "name": name,
+                        "condition": "defined",
+                        "expression": f"defined({name})",
+                    }
+                )
+                found_names.add(name)
 
-        return macros
+        # Pattern for comparison expressions: MACRO OP value
+        for match in re.finditer(r"(\w+)\s*(==|!=|<|>|<=|>=)\s*([^\s&|]+)", expression):
+            name = match.group(1)
+            if name not in found_names and name not in ["defined", "and", "or", "not"]:
+                all_matches.append(
+                    {
+                        "pos": match.start(),
+                        "name": name,
+                        "condition": "comparison",
+                        "expression": match.group(0),
+                    }
+                )
+                found_names.add(name)
+
+        # Pattern for simple macro usage (identifiers not already found)
+        # Strip string literals to avoid matching content inside strings
+        expr_stripped = re.sub(r'"[^"]*"', '""', expression)
+        for match in re.finditer(
+            r"(?<![a-zA-Z0-9_])([a-zA-Z_]\w*)(?![a-zA-Z0-9_(])", expr_stripped
+        ):
+            name = match.group(1)
+            if name not in found_names and name not in ["defined", "and", "or", "not"]:
+                all_matches.append(
+                    {
+                        "pos": match.start(),
+                        "name": name,
+                        "condition": "value",
+                        "expression": name,
+                    }
+                )
+                found_names.add(name)
+
+        # Sort by position and extract results
+        all_matches.sort(key=lambda x: x["pos"])
+        return [{k: v for k, v in m.items() if k != "pos"} for m in all_matches]
 
     # Override pcpp callback methods
     def on_directive_handle(self, directive, toks, ifpassthru, precedingtoks):

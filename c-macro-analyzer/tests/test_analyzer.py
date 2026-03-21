@@ -119,3 +119,43 @@ def test_directive_handling():
         assert "VERSION > 1" in result["combined_expression"]
     finally:
         os.unlink(test_file)
+
+
+def test_extract_macros_structured():
+    """Test that _extract_macros extracts all identifiers with proper categorization."""
+    from macro_analyzer.analyzer import PCPPAnalyzer
+
+    analyzer = PCPPAnalyzer()
+
+    # Test 1: defined() macros
+    expression = "defined(DEBUG) && defined(TEST)"
+    result = analyzer._extract_macros(expression)
+    expected = [
+        {"name": "DEBUG", "condition": "defined", "expression": "defined(DEBUG)"},
+        {"name": "TEST", "condition": "defined", "expression": "defined(TEST)"},
+    ]
+    assert result == expected, f"Expected {expected}, got {result}"
+
+    # Test 2: comparison macros
+    expression = 'VERSION > 1 && PLATFORM == "linux"'
+    result = analyzer._extract_macros(expression)
+    expected = [
+        {"name": "VERSION", "condition": "comparison", "expression": "VERSION > 1"},
+        {
+            "name": "PLATFORM",
+            "condition": "comparison",
+            "expression": 'PLATFORM == "linux"',
+        },
+    ]
+    assert result == expected, f"Expected {expected}, got {result}"
+
+    # Test 3: mixed expressions
+    expression = "defined(DEBUG) && VERSION > 1 && !defined(OLD_API)"
+    result = analyzer._extract_macros(expression)
+    expected = [
+        {"name": "DEBUG", "condition": "defined", "expression": "defined(DEBUG)"},
+        {"name": "VERSION", "condition": "comparison", "expression": "VERSION > 1"},
+        {"name": "OLD_API", "condition": "defined", "expression": "defined(OLD_API)"},
+    ]
+    # Note: !defined(OLD_API) should still be categorized as "defined"
+    assert result == expected, f"Expected {expected}, got {result}"
