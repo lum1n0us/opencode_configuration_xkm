@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+macro_analyzer/__init__.py
+macro_analyzer/__main__.py
+macro_analyzer/analyzer.py
+macro_analyzer/cli.py
+macro_analyzer/logging.py
+macro_analyzer.egg-info/PKG-INFO
+macro_analyzer.egg-info/SOURCES.txt
+macro_analyzer.egg-info/dependency_links.txt
+macro_analyzer.egg-info/entry_points.txt
+macro_analyzer.egg-info/requires.txt
+macro_analyzer.egg-info/top_level.txt
+tests/test_analyzer.py
+tests/test_cli.py
+tests/test_integration.py
+tests/test_logging.py

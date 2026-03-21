@@ -2,7 +2,7 @@ import pytest
 import json
 import tempfile
 import os
-from macro_analyzer.processor import FileProcessor
+from macro_analyzer.analyzer import PCPPAnalyzer
 
 
 def test_integration_complex_file():
@@ -29,16 +29,16 @@ def test_integration_complex_file():
         test_file = f.name
 
     try:
-        processor = FileProcessor()
+        analyzer = PCPPAnalyzer()
 
         # Test line 5 (advanced_debug) - DEBUG not defined
-        result = processor.analyze_file(test_file, 5)
+        result = analyzer.analyze(test_file, 5)
         assert result["line"] == 5
         # Should show the condition chain even though DEBUG is not defined
         assert result["combined_expression"] == "defined(DEBUG) && (VERSION > 2)"
 
         # Test line 12 (linux_code) - PLATFORM == "linux" is true
-        result = processor.analyze_file(test_file, 12)
+        result = analyzer.analyze(test_file, 12)
         assert result["line"] == 12
         assert "PLATFORM" in result["combined_expression"]
         assert "linux" in result["combined_expression"]

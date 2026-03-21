@@ -1,4 +1,3 @@
-import pytest
 import logging
 from io import StringIO
 from macro_analyzer.logging import MacroLogger, LogLevel, TRACE_LEVEL

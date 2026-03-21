@@ -1,7 +1,8 @@
 import argparse
 import json
 import sys
-from .processor import FileProcessor
+from .analyzer import PCPPAnalyzer
+from .logging import LogLevel
 
 
 def main():
@@ -17,12 +18,29 @@ def main():
         default="json",
         help="Output format (default: json)",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase verbosity level (-v: verbose, -vv: debug, -vvv: trace)",
+    )
 
     args = parser.parse_args()
 
+    # Determine log level from verbosity count
+    if args.verbose == 0:
+        log_level = LogLevel.QUIET
+    elif args.verbose == 1:
+        log_level = LogLevel.VERBOSE
+    elif args.verbose == 2:
+        log_level = LogLevel.DEBUG
+    else:
+        log_level = LogLevel.TRACE
+
     try:
-        processor = FileProcessor()
-        result = processor.analyze_file(args.file, args.line)
+        analyzer = PCPPAnalyzer(log_level=log_level)
+        result = analyzer.analyze(args.file, args.line)
 
         if args.output == "json":
             print(json.dumps(result, indent=2))

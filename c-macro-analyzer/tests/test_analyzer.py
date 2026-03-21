@@ -24,15 +24,16 @@ class TestConditionContext:
 class TestPCPPAnalyzerInit:
     def test_analyzer_initialization_default(self):
         analyzer = PCPPAnalyzer()
-        assert analyzer.log_level == LogLevel.QUIET
+        # log_level is stored in logger, not as separate attribute
+        assert analyzer.logger.level == LogLevel.QUIET
 
     def test_analyzer_initialization_with_verbose_level(self):
         analyzer = PCPPAnalyzer(log_level=LogLevel.VERBOSE)
-        assert analyzer.log_level == LogLevel.VERBOSE
+        assert analyzer.logger.level == LogLevel.VERBOSE
 
     def test_analyzer_initialization_with_debug_level(self):
         analyzer = PCPPAnalyzer(log_level=LogLevel.DEBUG)
-        assert analyzer.log_level == LogLevel.DEBUG
+        assert analyzer.logger.level == LogLevel.DEBUG
 
     def test_analyzer_has_condition_stack(self):
         analyzer = PCPPAnalyzer()
@@ -42,7 +43,7 @@ class TestPCPPAnalyzerInit:
     def test_analyzer_has_line_conditions(self):
         analyzer = PCPPAnalyzer()
         assert hasattr(analyzer, "line_conditions")
-        assert analyzer.line_conditions == []
+        assert analyzer.line_conditions == {}  # Changed from [] to {}
 
     def test_analyzer_has_symbols(self):
         analyzer = PCPPAnalyzer()
@@ -96,3 +97,25 @@ int x = 1;
             assert "combined_expression" in result
         finally:
             os.unlink(filepath)
+
+
+def test_directive_handling():
+    analyzer = PCPPAnalyzer(log_level=LogLevel.TRACE)
+
+    test_content = """#define VERSION 2
+#if VERSION > 1
+  // Line 3
+#endif
+"""
+    import tempfile
+    import os
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".c", delete=False) as f:
+        f.write(test_content)
+        test_file = f.name
+
+    try:
+        result = analyzer.analyze(test_file, 3)
+        assert "VERSION > 1" in result["combined_expression"]
+    finally:
+        os.unlink(test_file)
