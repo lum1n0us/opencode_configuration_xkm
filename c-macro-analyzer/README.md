@@ -62,12 +62,36 @@ macro-analyzer src/main.c 123 -vvv
   "file": "example.c",
   "line": 42,
   "macros": [
-    {"name": "DEBUG", "condition": "defined"},
-    {"name": "VERSION", "condition": "> 1"}
+    {
+      "name": "DEBUG",
+      "condition": "defined",
+      "expression": "defined(DEBUG)"
+    },
+    {
+      "name": "VERSION",
+      "condition": "comparison",
+      "expression": "VERSION > 1"
+    }
   ],
   "combined_expression": "defined(DEBUG) && VERSION > 1"
 }
 ```
+
+**Note:** Header guard macros (matching `*_H*` pattern) are automatically filtered from the output.
+
+### Output Format Details
+
+The analyzer returns a JSON object with the following structure:
+
+- **file**: Path to the analyzed file
+- **line**: Target line number (1-indexed)
+- **macros**: Array of macro information objects, each containing:
+  - **name**: Macro identifier
+  - **condition**: Usage type: `"defined"`, `"comparison"`, or `"value"`
+  - **expression**: The specific expression fragment containing this macro
+- **combined_expression**: Full logical expression combining all active conditions
+
+**Header Guard Filtering:** Macros matching the pattern `*_H*` (e.g., `HEADER_H`, `MY_HEADER_H_`) are automatically excluded from the output, as they typically represent include guards rather than configuration macros.
 
 ## Using in Other Repositories
 
