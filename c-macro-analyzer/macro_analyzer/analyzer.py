@@ -133,10 +133,17 @@ class PCPPAnalyzer(pcpp.Preprocessor):
         all_matches = []
         found_names = set()
 
+        def is_header_guard(name: str) -> bool:
+            return bool(re.match(r".*_H(_[A-Z0-9_]*)?$", name))
+
         # Pattern for defined(macro) or !defined(macro)
         for match in re.finditer(r"(!?\s*defined)\s*\(\s*(\w+)\s*\)", expression):
             name = match.group(2)
-            if name not in found_names and name not in self._RESERVED_WORDS:
+            if (
+                name not in found_names
+                and name not in self._RESERVED_WORDS
+                and not is_header_guard(name)
+            ):
                 all_matches.append(
                     {
                         "pos": match.start(),
@@ -152,7 +159,11 @@ class PCPPAnalyzer(pcpp.Preprocessor):
             r"(\w+)\s*(==|!=|<|>|<=|>=)\s*([^\s&|()]+)", expression
         ):
             name = match.group(1)
-            if name not in found_names and name not in self._RESERVED_WORDS:
+            if (
+                name not in found_names
+                and name not in self._RESERVED_WORDS
+                and not is_header_guard(name)
+            ):
                 all_matches.append(
                     {
                         "pos": match.start(),
@@ -170,7 +181,11 @@ class PCPPAnalyzer(pcpp.Preprocessor):
             r"(?<![a-zA-Z0-9_])([a-zA-Z_]\w*)(?![a-zA-Z0-9_(])", expr_stripped
         ):
             name = match.group(1)
-            if name not in found_names and name not in self._RESERVED_WORDS:
+            if (
+                name not in found_names
+                and name not in self._RESERVED_WORDS
+                and not is_header_guard(name)
+            ):
                 all_matches.append(
                     {
                         "pos": match.start(),

@@ -183,3 +183,56 @@ def test_extract_macros_structured():
         }
     ]
     assert result == expected, f"Expected {expected}, got {result}"
+
+
+def test_header_guard_filtering():
+    """Test that header guard macros (*_H* pattern) are filtered out."""
+    from macro_analyzer.analyzer import PCPPAnalyzer
+
+    analyzer = PCPPAnalyzer()
+
+    test_cases = [
+        ("defined(MY_HEADER_H)", []),
+        ("defined(PROJECT_HEADER_H_)", []),
+        ("!defined(HEADER_H)", []),
+        (
+            "defined(HEADER_H) && defined(DEBUG)",
+            [
+                {
+                    "name": "DEBUG",
+                    "condition": "defined",
+                    "expression": "defined(DEBUG)",
+                }
+            ],
+        ),
+        (
+            "VERSION > 1 && defined(API_H)",
+            [
+                {
+                    "name": "VERSION",
+                    "condition": "comparison",
+                    "expression": "VERSION > 1",
+                }
+            ],
+        ),
+        (
+            "defined(NOT_A_HEADER)",
+            [
+                {
+                    "name": "NOT_A_HEADER",
+                    "condition": "defined",
+                    "expression": "defined(NOT_A_HEADER)",
+                }
+            ],
+        ),
+        (
+            "defined(SOME_H_FILE)",
+            [],
+        ),
+    ]
+
+    for expression, expected in test_cases:
+        result = analyzer._extract_macros(expression)
+        assert result == expected, (
+            f"For expression '{expression}': expected {expected}, got {result}"
+        )
