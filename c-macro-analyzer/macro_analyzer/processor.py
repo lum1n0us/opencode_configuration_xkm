@@ -1,6 +1,8 @@
+import re
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from .expression import evaluate_expression
+from .symbols import SymbolTable
 
 
 @dataclass
@@ -26,22 +28,30 @@ class ConditionStack:
             condition: Condition expression
             is_true: Whether the condition evaluates to true
         """
+        # Check if parent conditions are active
+        parent_active = self.is_active()
         entry = ConditionEntry(
             condition=condition,
-            active=is_true and not self._has_true_branch_in_current_block(),
+            active=is_true
+            and not self._has_true_branch_in_current_block()
+            and parent_active,
             has_true_branch=is_true,
         )
         self._stack.append(entry)
 
-    def push_else(self) -> None:
-        """Push an else branch onto the stack."""
-        if not self._stack:
-            return
+    def push_else(
+        self, previous_condition: str = "", previous_has_true_branch: bool = False
+    ) -> None:
+        """Push an else branch onto the stack.
 
+        Args:
+            previous_condition: The condition from the previous if/elif
+            previous_has_true_branch: Whether the previous if/elif was true
+        """
         # Else is active if no true branch was taken in current block
         entry = ConditionEntry(
-            condition="",
-            active=not self._has_true_branch_in_current_block(),
+            condition=f"!({previous_condition})" if previous_condition else "",
+            active=not previous_has_true_branch,
             has_true_branch=True,
             is_else=True,
         )
@@ -137,3 +147,147 @@ def combine_conditions(conditions: List[str]) -> str:
         combined = f"{combined} && {condition}"
 
     return combined
+
+
+class FileProcessor:
+    """Processes C/C++ files to analyze macro control."""
+
+    def __init__(self):
+        self.symbols = SymbolTable()
+        self.stack = ConditionStack()
+
+    def analyze_file(self, filepath: str, target_line: int) -> Dict[str, Any]:
+        """Analyze a file to find macros controlling a specific line.
+
+        Args:
+            filepath: Path to C/C++ file
+            target_line: Line number to analyze (1-indexed)
+
+        Returns:
+            Dictionary with analysis results
+        """
+        self.symbols = SymbolTable()
+        self.stack = ConditionStack()
+
+        with open(filepath, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        for i, line in enumerate(lines, 1):
+            self._process_line(line.rstrip("\n"), i)
+
+            if i == target_line:
+                # Found target line
+                active_conditions = self.stack.get_active_conditions()
+                combined = combine_conditions(active_conditions)
+
+                # Convert #ifdef to defined() for consistency
+                combined = self._normalize_condition(combined)
+
+                return {
+                    "file": filepath,
+                    "line": target_line,
+                    "macros": self._extract_macros_from_expression(combined),
+                    "combined_expression": combined,
+                }
+
+        # Line not found or beyond file
+        return {
+            "file": filepath,
+            "line": target_line,
+            "macros": [],
+            "combined_expression": "",
+        }
+
+    def _process_line(self, line: str, line_num: int) -> None:
+        """Process a single line of source code."""
+        stripped = line.strip()
+
+        # Check for preprocessor directives
+        if stripped.startswith("#"):
+            self._process_directive(stripped, line_num)
+
+    def _process_directive(self, directive: str, line_num: int) -> None:
+        """Process a preprocessor directive."""
+        # Remove leading # and whitespace
+        directive = directive[1:].strip()
+
+        # Handle #define
+        if directive.startswith("define "):
+            parts = directive[7:].strip().split(maxsplit=1)
+            if parts:
+                macro = parts[0]
+                value = parts[1] if len(parts) > 1 else None
+                self.symbols.define(macro, value)
+
+        # Handle #undef
+        elif directive.startswith("undef "):
+            macro = directive[6:].strip()
+            self.symbols.undefine(macro)
+
+        # Handle #ifdef
+        elif directive.startswith("ifdef "):
+            macro = directive[6:].strip()
+            condition = f"defined({macro})"
+            is_true = evaluate_expression(condition, self.symbols.get_all())
+            self.stack.push_if(condition, is_true)
+
+        # Handle #ifndef
+        elif directive.startswith("ifndef "):
+            macro = directive[7:].strip()
+            condition = f"!defined({macro})"
+            is_true = evaluate_expression(condition, self.symbols.get_all())
+            self.stack.push_if(condition, is_true)
+
+        # Handle #if
+        elif directive.startswith("if "):
+            condition = directive[3:].strip()
+            is_true = evaluate_expression(condition, self.symbols.get_all())
+            self.stack.push_if(condition, is_true)
+
+        # Handle #elif
+        elif directive.startswith("elif "):
+            condition = directive[5:].strip()
+            is_true = evaluate_expression(condition, self.symbols.get_all())
+            self.stack.pop()  # Remove previous if/elif
+            self.stack.push_if(condition, is_true)
+
+        # Handle #else
+        elif directive == "else":
+            # Get previous condition from the popped entry
+            popped = self.stack.pop()  # Remove previous if/elif
+            previous_condition = popped.condition if popped else ""
+            previous_has_true_branch = popped.has_true_branch if popped else False
+            self.stack.push_else(previous_condition, previous_has_true_branch)
+
+        # Handle #endif
+        elif directive == "endif":
+            self.stack.pop()
+
+    def _normalize_condition(self, condition: str) -> str:
+        """Normalize condition string (e.g., convert #ifdef to defined())."""
+        if not condition:
+            return condition
+
+        # Simple normalization - in real implementation would parse and rewrite
+        return condition
+
+    def _extract_macros_from_expression(self, expression: str) -> List[Dict[str, str]]:
+        """Extract individual macros from combined expression.
+
+        Args:
+            expression: Combined logical expression
+
+        Returns:
+            List of dicts with name and condition for each macro
+        """
+        # Simple extraction - in real implementation would parse expression
+        macros = []
+
+        # Look for defined(macro) patterns
+        defined_pattern = r"defined\((\w+)\)"
+        for match in re.finditer(defined_pattern, expression):
+            macros.append({"name": match.group(1), "condition": "defined"})
+
+        # Look for simple identifier comparisons
+        # This is simplified - real implementation would parse expression tree
+        return macros

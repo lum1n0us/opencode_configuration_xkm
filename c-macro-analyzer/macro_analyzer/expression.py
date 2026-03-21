@@ -18,11 +18,12 @@ def tokenize_expression(expr: str) -> list[str]:
     # Remove comments (though preprocessor shouldn't have them)
     expr = expr.strip()
 
-    # Token pattern: identifiers, numbers, operators, parentheses
+    # Token pattern: identifiers, numbers, string literals, operators, parentheses
     pattern = r"""
         \bdefined\b|           # defined keyword
         \b[a-zA-Z_][a-zA-Z0-9_]*\b|  # identifiers
         \b\d+\b|               # integers
+        "[^"]*"|               # string literals
         [<>]=?|                # comparison operators
         ==|!=|                 # equality operators
         &&|\|\||               # logical operators
@@ -101,6 +102,8 @@ def parse_expression(expr: str) -> ASTNode:
             output.append(ASTNode("identifier", token))
         elif token.isdigit():
             output.append(ASTNode("literal", token))
+        elif token.startswith('"') and token.endswith('"'):
+            output.append(ASTNode("string", token))
         elif token == "(":
             operators.append(token)
         elif token == ")":
@@ -162,11 +165,25 @@ def _evaluate_ast(node: ASTNode, symbols: dict) -> int:
     if node.type == "literal":
         return int(node.value)
 
+    if node.type == "string":
+        # Remove quotes and return string value
+        return node.value[1:-1]
+
     if node.type == "identifier":
         # Look up in symbols, default to 0 if not defined
         if node.value in symbols:
             val = symbols[node.value]
-            return 1 if val is None else int(val)
+            if val is None:
+                return 1  # defined without value
+            # Try to convert to int
+            try:
+                return int(val)
+            except ValueError:
+                # String value, remove surrounding quotes if present
+                if val.startswith('"') and val.endswith('"'):
+                    return val[1:-1]  # Return string without quotes
+                # Other non-numeric value
+                return val
         return 0
 
     if node.type == "defined":
@@ -189,30 +206,66 @@ def _evaluate_ast(node: ASTNode, symbols: dict) -> int:
             return _evaluate_ast(node.children[1], symbols)
 
         # Arithmetic and comparison operators
-        left = _evaluate_ast(node.children[0], symbols)
-        right = _evaluate_ast(node.children[1], symbols)
+        left_val = _evaluate_ast(node.children[0], symbols)
+        right_val = _evaluate_ast(node.children[1], symbols)
 
+        # Handle string comparison
+        if node.value in ["==", "!=", "<", ">", "<=", ">="]:
+            # Try to compare as numbers if both are numeric
+            try:
+                left_num = (
+                    int(left_val)
+                    if isinstance(left_val, str) and left_val.isdigit()
+                    else left_val
+                )
+                right_num = (
+                    int(right_val)
+                    if isinstance(right_val, str) and right_val.isdigit()
+                    else right_val
+                )
+                if isinstance(left_num, int) and isinstance(right_num, int):
+                    # Numeric comparison
+                    if node.value == "<":
+                        return 1 if left_num < right_num else 0
+                    if node.value == ">":
+                        return 1 if left_num > right_num else 0
+                    if node.value == "<=":
+                        return 1 if left_num <= right_num else 0
+                    if node.value == ">=":
+                        return 1 if left_num >= right_num else 0
+                    if node.value == "==":
+                        return 1 if left_num == right_num else 0
+                    if node.value == "!=":
+                        return 1 if left_num != right_num else 0
+            except (ValueError, TypeError):
+                pass
+
+            # String comparison (lexicographic)
+            left_str = str(left_val)
+            right_str = str(right_val)
+            if node.value == "<":
+                return 1 if left_str < right_str else 0
+            if node.value == ">":
+                return 1 if left_str > right_str else 0
+            if node.value == "<=":
+                return 1 if left_str <= right_str else 0
+            if node.value == ">=":
+                return 1 if left_str >= right_str else 0
+            if node.value == "==":
+                return 1 if left_str == right_str else 0
+            if node.value == "!=":
+                return 1 if left_str != right_str else 0
+
+        # Arithmetic operators (numeric only)
         if node.value == "+":
-            return left + right
+            return left_val + right_val
         if node.value == "-":
-            return left - right
+            return left_val - right_val
         if node.value == "*":
-            return left * right
+            return left_val * right_val
         if node.value == "/":
-            return left // right if right != 0 else 0
+            return left_val // right_val if right_val != 0 else 0
         if node.value == "%":
-            return left % right if right != 0 else 0
-        if node.value == "<":
-            return 1 if left < right else 0
-        if node.value == ">":
-            return 1 if left > right else 0
-        if node.value == "<=":
-            return 1 if left <= right else 0
-        if node.value == ">=":
-            return 1 if left >= right else 0
-        if node.value == "==":
-            return 1 if left == right else 0
-        if node.value == "!=":
-            return 1 if left != right else 0
+            return left_val % right_val if right_val != 0 else 0
 
     return 0
