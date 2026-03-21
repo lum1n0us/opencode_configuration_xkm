@@ -93,14 +93,17 @@ class PCPPAnalyzer(pcpp.Preprocessor):
             # Get conditions for target line
             conditions = self.line_conditions.get(target_line, [])
             combined = self._combine_conditions(conditions)
+            filtered_combined = self._filter_header_guards(combined)
 
-            self.logger.verbose(f"Line {target_line} controlled by: {combined}")
+            self.logger.verbose(
+                f"Line {target_line} controlled by: {filtered_combined}"
+            )
 
             return {
                 "file": filepath,
                 "line": target_line,
-                "macros": self._extract_macros(combined),
-                "combined_expression": combined,
+                "macros": self._extract_macros(filtered_combined),
+                "combined_expression": filtered_combined,
             }
 
         except Exception as e:
@@ -198,6 +201,25 @@ class PCPPAnalyzer(pcpp.Preprocessor):
         # Sort by position and extract results
         all_matches.sort(key=lambda x: x["pos"])
         return [{k: v for k, v in m.items() if k != "pos"} for m in all_matches]
+
+    def _filter_header_guards(self, expression: str) -> str:
+        """Remove header guard defined() calls from expression.
+
+        Args:
+            expression: Combined logical expression
+
+        Returns:
+            Expression with header guard defined() calls removed
+        """
+        filtered = re.sub(
+            r"!?defined\s*\(\s*(\w+)\s*\)",
+            lambda m: "" if self._is_header_guard(m.group(1)) else m.group(0),
+            expression,
+        )
+        filtered = re.sub(r"\s*(&&|\|\|)\s*$", "", filtered)
+        filtered = re.sub(r"^\s*(&&|\|\|)\s*", "", filtered)
+        filtered = re.sub(r"\s*(&&|\|\|)\s*(&&|\|\|)\s*", " ", filtered)
+        return filtered.strip()
 
     # Override pcpp callback methods
     def on_directive_handle(self, directive, toks, ifpassthru, precedingtoks):

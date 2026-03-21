@@ -45,3 +45,31 @@ def test_integration_complex_file():
 
     finally:
         os.unlink(test_file)
+
+
+def test_header_guard_filtering_integration():
+    """Test that header guards are filtered in real file analysis."""
+    from macro_analyzer.analyzer import PCPPAnalyzer
+
+    analyzer = PCPPAnalyzer()
+
+    # Analyze header_guard.c
+    test_file = "tests/samples/header_guard.c"
+    result = analyzer.analyze(test_file, 8)  # Line 8: log_message("Debug")
+
+    # Should have DEBUG but not HEADER_GUARD_H
+    assert "defined(DEBUG)" in result["combined_expression"]
+    assert "HEADER_GUARD_H" not in result["combined_expression"]
+
+    # Check macros array
+    macro_names = [m["name"] for m in result["macros"]]
+    assert "DEBUG" in macro_names
+    assert "HEADER_GUARD_H" not in macro_names
+    assert "VERSION" not in macro_names  # VERSION not in this line's condition
+
+    # Test another line
+    result = analyzer.analyze(test_file, 12)  # Line 12: enable_feature()
+    assert "VERSION > 1" in result["combined_expression"]
+    macro_names = [m["name"] for m in result["macros"]]
+    assert "VERSION" in macro_names
+    assert "HEADER_GUARD_H" not in macro_names
