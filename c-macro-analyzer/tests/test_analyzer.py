@@ -95,6 +95,16 @@ int x = 1;
             analyzer = PCPPAnalyzer()
             result = analyzer.analyze(filepath, 5)
             assert "combined_expression" in result
+            # Also verify macros array has structured format
+            assert "macros" in result
+            assert isinstance(result["macros"], list)
+            # Should contain both A and B with structured info
+            assert len(result["macros"]) == 2
+            for macro in result["macros"]:
+                assert "name" in macro
+                assert "condition" in macro
+                assert "expression" in macro
+                assert macro["condition"] == "defined"
         finally:
             os.unlink(filepath)
 
@@ -117,6 +127,11 @@ def test_directive_handling():
     try:
         result = analyzer.analyze(test_file, 3)
         assert "VERSION > 1" in result["combined_expression"]
+        # Verify structured macros output
+        assert len(result["macros"]) == 1
+        assert result["macros"][0]["name"] == "VERSION"
+        assert result["macros"][0]["condition"] == "comparison"
+        assert result["macros"][0]["expression"] == "VERSION > 1"
     finally:
         os.unlink(test_file)
 
