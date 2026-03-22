@@ -1,0 +1,2 @@
+[console_scripts]
+macro-analyzer = macro_analyzer.cli:main
