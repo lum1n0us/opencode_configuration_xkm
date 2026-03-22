@@ -159,7 +159,7 @@ class PCPPAnalyzer(pcpp.Preprocessor):
                         "pos": match.start(),
                         "name": name,
                         "condition": "defined",
-                        "expression": f"defined({name})",
+                        "expression": match.group(0).strip(),
                     }
                 )
                 found_names.add(name)

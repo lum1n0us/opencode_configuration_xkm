@@ -170,7 +170,7 @@ def test_extract_macros_structured():
     expected = [
         {"name": "DEBUG", "condition": "defined", "expression": "defined(DEBUG)"},
         {"name": "VERSION", "condition": "comparison", "expression": "VERSION > 1"},
-        {"name": "OLD_API", "condition": "defined", "expression": "defined(OLD_API)"},
+        {"name": "OLD_API", "condition": "defined", "expression": "!defined(OLD_API)"},
     ]
     # Note: !defined(OLD_API) should still be categorized as "defined"
     assert result == expected, f"Expected {expected}, got {result}"
@@ -179,7 +179,7 @@ def test_extract_macros_structured():
     expression = "!defined(DISABLED)"
     result = analyzer._extract_macros(expression)
     expected = [
-        {"name": "DISABLED", "condition": "defined", "expression": "defined(DISABLED)"}
+        {"name": "DISABLED", "condition": "defined", "expression": "!defined(DISABLED)"}
     ]
     assert result == expected, f"Expected {expected}, got {result}"
 
