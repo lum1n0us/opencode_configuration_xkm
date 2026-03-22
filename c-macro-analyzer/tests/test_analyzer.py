@@ -200,6 +200,32 @@ def test_extract_macros_structured():
     assert result == expected, f"Expected {expected}, got {result}"
 
 
+def test_filter_header_guards_removes_empty_parentheses():
+    """Test that empty parentheses are removed after header guard filtering."""
+    from macro_analyzer.analyzer import PCPPAnalyzer
+
+    analyzer = PCPPAnalyzer()
+
+    test_cases = [
+        ("()", ""),
+        ("( )", ""),
+        ("(  )", ""),
+        ("() && DEBUG", "DEBUG"),
+        ("DEBUG && ()", "DEBUG"),
+        ("() && ()", ""),
+        ("(defined(HEADER_H))", ""),
+        ("(defined(HEADER_H) && DEBUG)", "DEBUG"),
+        ("DEBUG && (defined(HEADER_H))", "DEBUG"),
+        ("(defined(HEADER_H)) && (defined(OTHER_H))", ""),
+    ]
+
+    for input_expr, expected in test_cases:
+        result = analyzer._filter_header_guards(input_expr)
+        assert result == expected, (
+            f"Failed for '{input_expr}': got '{result}', expected '{expected}'"
+        )
+
+
 def test_header_guard_filtering():
     """Test that header guard macros (*_H* pattern) are filtered out."""
     from macro_analyzer.analyzer import PCPPAnalyzer

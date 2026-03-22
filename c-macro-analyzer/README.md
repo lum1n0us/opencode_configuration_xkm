@@ -93,6 +93,42 @@ The analyzer returns a JSON object with the following structure:
 
 **Header Guard Filtering:** Macros matching the pattern `*_H*` (e.g., `HEADER_H`, `MY_HEADER_H_`) are automatically excluded from the output, as they typically represent include guards rather than configuration macros.
 
+### Enhanced Output Format (v1.1+)
+
+The analyzer now includes a `condition_blocks` field that provides detailed information about each conditional block controlling the target line:
+
+```json
+{
+  "file": "example.c",
+  "line": 42,
+  "macros": [...],
+  "combined_expression": "FOO == 1 && BAR == 0",
+  "condition_blocks": [
+    {
+      "line": 3,
+      "expression": "FOO == 1",
+      "type": "if"
+    },
+    {
+      "line": 4,
+      "expression": "BAR == 0",
+      "type": "if"
+    }
+  ]
+}
+```
+
+**condition_blocks fields:**
+- **line**: The source file line number where the conditional directive appears
+- **expression**: The original condition expression
+- **type**: Type of conditional directive: `"if"`, `"ifdef"`, `"ifndef"`, `"elif"`, or `"else"`
+
+**Note:** Header guard conditions (macros matching `*_H*` pattern) are automatically excluded from `condition_blocks`.
+
+### Empty Parentheses Fix
+
+Empty parentheses `()` that could appear in `combined_expression` after header guard filtering are now automatically removed.
+
 ## Using in Other Repositories
 
 ### Method 1: Direct python -m execution (simplest)
