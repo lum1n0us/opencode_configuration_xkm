@@ -2,7 +2,7 @@ import argparse
 import json
 import sys
 from .analyzer import PCPPAnalyzer
-from .logging import LogLevel
+from .macro_logging import LogLevel
 
 
 def main():

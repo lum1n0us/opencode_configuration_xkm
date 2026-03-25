@@ -1,6 +1,6 @@
 import logging
 from io import StringIO
-from macro_analyzer.logging import MacroLogger, LogLevel, TRACE_LEVEL
+from macro_analyzer.macro_logging import MacroLogger, LogLevel, TRACE_LEVEL
 
 
 def test_loglevel_enum_values():

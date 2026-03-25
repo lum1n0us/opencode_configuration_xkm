@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Any, Tuple
 
 import pcpp
 
-from .logging import LogLevel, MacroLogger
+from .macro_logging import LogLevel, MacroLogger
 
 _HEADER_GUARD_PATTERN = re.compile(r".*_H(_[A-Z0-9_]*)?$")
 

@@ -1,6 +1,11 @@
-import logging
 import sys
 from enum import IntEnum
+
+# Import logging after defining the module to avoid circular import
+import logging as _logging
+
+TRACE_LEVEL = _logging.DEBUG - 5
+_logging.addLevelName(TRACE_LEVEL, "TRACE")
 
 
 class LogLevel(IntEnum):
@@ -10,33 +15,29 @@ class LogLevel(IntEnum):
     TRACE = 3
 
 
-TRACE_LEVEL = logging.DEBUG - 5
-logging.addLevelName(TRACE_LEVEL, "TRACE")
-
-
 class MacroLogger:
     _LOGGER_NAME = "macro_analyzer"
 
     _LEVEL_MAP = {
-        LogLevel.QUIET: logging.WARNING,
-        LogLevel.VERBOSE: logging.INFO,
-        LogLevel.DEBUG: logging.DEBUG,
+        LogLevel.QUIET: _logging.WARNING,
+        LogLevel.VERBOSE: _logging.INFO,
+        LogLevel.DEBUG: _logging.DEBUG,
         LogLevel.TRACE: TRACE_LEVEL,
     }
 
     def __init__(self, level: LogLevel = LogLevel.QUIET):
         self.level = level
-        self._logger = logging.getLogger(self._LOGGER_NAME)
+        self._logger = _logging.getLogger(self._LOGGER_NAME)
         self._setup_logger()
 
     def _setup_logger(self) -> None:
         self._logger.handlers.clear()
         self._logger.setLevel(self._LEVEL_MAP[self.level])
 
-        handler = logging.StreamHandler()
+        handler = _logging.StreamHandler()
         handler.setStream(sys.stderr)
         handler.setFormatter(
-            logging.Formatter("%(levelname)s:%(name)s:%(lineno)d - %(message)s")
+            _logging.Formatter("%(levelname)s:%(name)s:%(lineno)d - %(message)s")
         )
         self._logger.addHandler(handler)
 

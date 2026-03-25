@@ -2,7 +2,7 @@ import os
 import tempfile
 import pytest
 from macro_analyzer.analyzer import PCPPAnalyzer, ConditionContext
-from macro_analyzer.logging import LogLevel
+from macro_analyzer.macro_logging import LogLevel
 
 
 class TestConditionContext:
