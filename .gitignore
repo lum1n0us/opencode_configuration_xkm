@@ -11,9 +11,6 @@ bun.lock
 node_modules
 package.json
 
-#
-# don't submit config files
-opencode.json
 oh-my-opencode.json
 
 #

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "deepseek": {
+      "name": "DeepSeek",
+      "models": {
+        "deepseek-v4-flash": {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash",
+          "interleaved": { "field": "reasoning_content" },
+          "limit": { "context": 1048576, "output": 384000 },
+          "settings": {
+            "temperature": 0.12,
+            "topP": 0.75,
+            "maxTokens": 8192,
+            "frequency_penalty": 0.1,
+            "presence_penalty": 0.1
+          }
+        },
+        "deepseek-v4-pro": {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro",
+          "interleaved": { "field": "reasoning_content" },
+          "limit": { "context": 1048576, "output": 384000 },
+          "settings": {
+            "temperature": 0.08,
+            "topP": 0.7,
+            "maxTokens": 32768,
+            "frequency_penalty": 0.05,
+            "presence_penalty": 0.05
+          }
+        }
+      }
+    }
+  },
+  "model": "deepseek/deepseek-v4-pro",
+  "small_model": "deepseek/deepseek-v4-flash",
+  "default_agent": "build",
+  "permission": {
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "edit": "allow",
+    "bash": {
+      "*": "allow",
+      "rm *": "ask",
+      "git push*": "ask",
+      "sudo *": "ask",
+      "* install *": "ask"
+    },
+    "webfetch": "allow",
+    "websearch": "allow",
+    "skill": "allow"
+  },
+  "agent": {
+    "build": {
+      "model": "deepseek/deepseek-v4-pro",
+      "steps": 25,
+      "temperature": 0.08,
+      "permission": {
+        "read": "allow",
+        "edit": "allow",
+        "webfetch": "allow",
+        "websearch": "allow",
+        "skill": "allow"
+      }
+    },
+    "plan": {
+      "model": "deepseek/deepseek-v4-pro",
+      "steps": 35,
+      "temperature": 0.05,
+      "permission": {
+        "read": "allow",
+        "glob": "allow",
+        "edit": "ask",
+        "bash": {
+          "*": "allow",
+          "rm *": "ask",
+          "git push*": "ask",
+          "sudo *": "ask",
+          "* install *": "ask"
+        },
+        "webfetch": "allow",
+        "websearch": "allow",
+        "skill": "allow",
+        "external_directory": "allow"
+      }
+    }
+  },
+  "share": "disabled",
+  "compaction": {
+    "prune": true
+  },
+  "tool_output": {
+    "max_lines": 5,
+    "max_bytes": 2048
+  }
+}
