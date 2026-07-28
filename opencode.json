@@ -33,58 +33,95 @@
       }
     }
   },
-  "model": "deepseek/deepseek-v4-pro",
-  "small_model": "deepseek/deepseek-v4-flash",
+  "model": "github-copilot/gpt-5.6-terra",
+  "small_model": "github-copilot/gpt-5.6-luna",
   "default_agent": "build",
-  "permission": {
-    "read": "allow",
-    "glob": "allow",
-    "grep": "allow",
-    "edit": "allow",
-    "bash": {
-      "*": "allow",
-      "rm *": "ask",
-      "git push*": "ask",
-      "sudo *": "ask",
-      "* install *": "ask"
-    },
-    "webfetch": "allow",
-    "websearch": "allow",
-    "skill": "allow"
-  },
   "agent": {
     "build": {
-      "model": "deepseek/deepseek-v4-pro",
-      "steps": 25,
+      "model": "github-copilot/gpt-5.6-terra",
       "temperature": 0.08,
       "permission": {
-        "read": "allow",
-        "edit": "allow",
-        "webfetch": "allow",
-        "websearch": "allow",
-        "skill": "allow"
+        "edit": "allow"
       }
     },
     "plan": {
-      "model": "deepseek/deepseek-v4-pro",
-      "steps": 35,
+      "model": "github-copilot/gpt-5.6-sol",
       "temperature": 0.05,
       "permission": {
-        "read": "allow",
-        "glob": "allow",
-        "edit": "ask",
-        "bash": {
-          "*": "allow",
-          "rm *": "ask",
-          "git push*": "ask",
-          "sudo *": "ask",
-          "* install *": "ask"
-        },
-        "webfetch": "allow",
-        "websearch": "allow",
-        "skill": "allow",
-        "external_directory": "allow"
+        "edit": "deny"
       }
+    }
+  },
+  "permission": {
+    "*": "ask",
+    "read": {
+      "*": "allow",
+      ".env*": "deny",
+      "**/.env*": "deny",
+      ".env.example": "allow",
+      "**/.env.example": "allow",
+      ".ssh/**": "deny",
+      "**/.ssh/**": "deny",
+      "**/*.{pem,key,p12,pfx}": "deny",
+      ".aws/**": "deny",
+      "**/.aws/**": "deny",
+      ".kube/**": "deny",
+      "**/.kube/**": "deny"
+    },
+    "edit": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "lsp": "allow",
+    "webfetch": "allow",
+    "websearch": "allow",
+    "codesearch": "allow",
+    "skill": "allow",
+    "task": "allow",
+    "external_directory": "ask",
+    "doom_loop": "ask",
+    "bash": {
+      "*": "ask",
+      "pwd": "allow",
+      "ls*": "allow",
+      "which *": "allow",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git show*": "allow",
+      "git branch*": "allow",
+      "npm test*": "allow",
+      "npm run test*": "allow",
+      "npm run lint*": "allow",
+      "npm run build*": "allow",
+      "npm run typecheck*": "allow",
+      "pnpm test*": "allow",
+      "pnpm run test*": "allow",
+      "pnpm run lint*": "allow",
+      "pnpm run build*": "allow",
+      "pnpm run typecheck*": "allow",
+      "yarn test*": "allow",
+      "yarn lint*": "allow",
+      "yarn build*": "allow",
+      "bun test*": "allow",
+      "bun run test*": "allow",
+      "bun run lint*": "allow",
+      "bun run build*": "allow",
+      "pytest*": "allow",
+      "ruff check*": "allow",
+      "cargo test*": "allow",
+      "cargo check*": "allow",
+      "go test*": "allow",
+      "go vet*": "allow",
+      "make test*": "allow",
+      "make lint*": "allow",
+      "make build*": "allow",
+      "sudo *": "deny",
+      "su *": "deny",
+      "rm -rf*": "deny",
+      "git reset --hard*": "deny",
+      "git clean*": "deny",
+      "git push --force*": "deny",
+      "git push -f*": "deny"
     }
   },
   "share": "disabled",
